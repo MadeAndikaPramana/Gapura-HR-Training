@@ -1,0 +1,37 @@
+{
+    "name": "gapura-hr-training",
+    "private": true,
+    "type": "module",
+    "description": "GAPURA ANGKASA HR Training Management System",
+    "version": "1.0.0",
+    "scripts": {
+        "build": "vite build",
+        "dev": "vite",
+        "build:ssr": "vite build --ssr resources/js/ssr.jsx",
+        "dev:ssr": "vite build --ssr resources/js/ssr.jsx --watch"
+    },
+    "devDependencies": {
+        "@headlessui/react": "^2.0.0",
+        "@inertiajs/react": "^2.0.0",
+        "@tailwindcss/forms": "^0.5.3",
+        "@tailwindcss/typography": "^0.5.10",
+        "@vitejs/plugin-react": "^4.2.0",
+        "autoprefixer": "^10.4.12",
+        "axios": "^1.8.2",
+        "laravel-vite-plugin": "^2.0.0",
+        "postcss": "^8.4.31",
+        "react": "^18.2.0",
+        "react-dom": "^18.2.0",
+        "tailwindcss": "^3.2.1",
+        "vite": "^7.0.4"
+    },
+    "dependencies": {
+        "lucide-react": "^0.534.0",
+        "recharts": "^2.12.7",
+        "react-hot-toast": "^2.4.1",
+        "date-fns": "^3.6.0",
+        "@heroicons/react": "^2.1.1",
+        "clsx": "^2.1.0",
+        "framer-motion": "^11.0.24"
+    }
+}
