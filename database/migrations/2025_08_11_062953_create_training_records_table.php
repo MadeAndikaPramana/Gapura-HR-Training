@@ -13,22 +13,30 @@ return new class extends Migration
             $table->id();
             $table->foreignId('employee_id')->constrained()->onDelete('cascade');
             $table->foreignId('training_type_id')->constrained()->onDelete('cascade');
-            $table->string('certificate_number')->unique()->nullable();
-            $table->datetime('issue_date');
-            $table->datetime('expiry_date');
-            $table->enum('completion_status', ['PENDING', 'IN_PROGRESS', 'COMPLETED', 'FAILED'])->default('COMPLETED');
-            $table->string('training_provider')->nullable();
-            $table->decimal('cost', 10, 2)->nullable();
-            $table->text('notes')->nullable();
-            $table->string('certificate_path')->nullable();
-            $table->foreignId('previous_training_id')->nullable()->constrained('training_records')->onDelete('set null');
-            $table->timestamps();
-            $table->softDeletes();
-        });
-    }
 
-    public function down(): void
-    {
-        Schema::dropIfExists('training_records');
+            // Certificate info (dari Excel MPGA)
+            $table->string('certificate_number')->nullable(); // GLC/OPR-001129/OCT/2024
+            $table->date('valid_from')->nullable(); // FROM column
+            $table->date('valid_until')->nullable(); // UNTIL column
+            $table->date('issued_date')->nullable();
+
+            // Training status
+            $table->enum('status', ['active', 'expired', 'expiring_soon', 'pending'])->default('active');
+            $table->text('remarks')->nullable(); // KETERANGAN dari Excel
+
+            // Background check date (dari kolom BACKGROUND CHECK)
+            $table->date('background_check_date')->nullable();
+
+            // Import tracking
+            $table->string('import_batch_id')->nullable();
+            $table->timestamp('imported_at')->nullable();
+
+            $table->timestamps();
+
+            // Indexes
+            $table->index(['employee_id', 'training_type_id']);
+            $table->index(['status', 'valid_until']);
+            $table->index('import_batch_id');
+        });
     }
 };

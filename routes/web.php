@@ -371,6 +371,40 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::post('suspend-employee', [QuickActionsController::class, 'suspendEmployee'])->name('suspend-employee');
     });
 
+     Route::prefix('training')->name('training.')->group(function () {
+
+        // Main pages
+        Route::get('/', [App\Http\Controllers\TrainingController::class, 'index'])->name('index');
+        Route::get('/employees', [App\Http\Controllers\TrainingController::class, 'employees'])->name('employees');
+        Route::get('/dashboard', [App\Http\Controllers\TrainingController::class, 'dashboard'])->name('dashboard');
+
+        // CRUD Training Records
+        Route::get('/create', [App\Http\Controllers\TrainingController::class, 'create'])->name('create');
+        Route::post('/', [App\Http\Controllers\TrainingController::class, 'store'])->name('store');
+        Route::get('/{training}/edit', [App\Http\Controllers\TrainingController::class, 'edit'])->name('edit');
+        Route::put('/{training}', [App\Http\Controllers\TrainingController::class, 'update'])->name('update');
+        Route::delete('/{training}', [App\Http\Controllers\TrainingController::class, 'destroy'])->name('destroy');
+
+        // Import/Export MPGA
+        Route::get('/import', [App\Http\Controllers\TrainingController::class, 'importForm'])->name('import');
+        Route::post('/import', [App\Http\Controllers\TrainingController::class, 'importData'])->name('import.process');
+        Route::get('/export', [App\Http\Controllers\TrainingController::class, 'export'])->name('export');
+
+        // API endpoints for AJAX
+        Route::get('/api/statistics', [App\Http\Controllers\TrainingController::class, 'getStatistics'])->name('api.statistics');
+        Route::get('/api/employee/{nip}/trainings', [App\Http\Controllers\TrainingController::class, 'getEmployeeTrainings'])->name('api.employee.trainings');
+    });
+
+    Route::prefix('employees')->name('employees.')->group(function () {
+        Route::get('/', [App\Http\Controllers\EmployeeController::class, 'index'])->name('index');
+        Route::get('/create', [App\Http\Controllers\EmployeeController::class, 'create'])->name('create');
+        Route::post('/', [App\Http\Controllers\EmployeeController::class, 'store'])->name('store');
+        Route::get('/{employee}/edit', [App\Http\Controllers\EmployeeController::class, 'edit'])->name('edit');
+        Route::put('/{employee}', [App\Http\Controllers\EmployeeController::class, 'update'])->name('update');
+        Route::delete('/{employee}', [App\Http\Controllers\EmployeeController::class, 'destroy'])->name('destroy');
+        Route::get('/export', [App\Http\Controllers\EmployeeController::class, 'export'])->name('export');
+    });
+
 });
 
 // ============================================================================

@@ -11,28 +11,15 @@ return new class extends Migration
     {
         Schema::create('training_types', function (Blueprint $table) {
             $table->id();
-            $table->string('name')->unique();
-            $table->string('code')->unique()->nullable();
-            $table->string('category')->nullable();
+            $table->string('name'); // PAX & BAGGAGE HANDLING, SAFETY TRAINING, etc.
+            $table->string('code')->unique(); // PAX_BAGGAGE, SAFETY_SMS, etc.
             $table->text('description')->nullable();
-            $table->integer('validity_period')->default(12); // in months
-            $table->boolean('is_mandatory')->default(false);
+            $table->integer('validity_months'); // 36, 24, 12 months
+            $table->string('category')->default('OPERATIONAL'); // OPERATIONAL, SAFETY, SECURITY
+            $table->boolean('is_mandatory')->default(true);
             $table->boolean('is_active')->default(true);
-            $table->enum('compliance_level', ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'])->default('MEDIUM');
-            $table->string('training_provider_default')->nullable();
-            $table->decimal('cost_estimate', 10, 2)->nullable();
-            $table->json('requirements')->nullable();
-            $table->boolean('renewal_required')->default(true);
-            $table->integer('notification_days')->default(30);
-            $table->string('created_by')->nullable();
             $table->integer('sort_order')->default(0);
             $table->timestamps();
-            $table->softDeletes();
         });
-    }
-
-    public function down(): void
-    {
-        Schema::dropIfExists('training_types');
     }
 };

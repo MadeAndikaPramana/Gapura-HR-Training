@@ -1,34 +1,39 @@
+// ============================================================================
+// TRAINING EMPLOYEES PAGE - KONSISTEN DENGAN UI FIRMAN HR GAPURA
+// ============================================================================
+
 import React, { useState, useEffect } from "react";
 import { Head, Link, router } from "@inertiajs/react";
 import DashboardLayout from "@/Layouts/DashboardLayout";
 import {
     Search,
-    Plus,
+    Users,
+    Building2,
     Filter,
     FileDown,
-    Edit,
-    Trash2,
-    Users,
-    UserCheck,
-    Building2,
+    Eye,
     ChevronDown,
     ChevronLeft,
     ChevronRight,
     ChevronsLeft,
-    ChevronsRight
+    ChevronsRight,
+    UserCheck,
+    Clock,
+    Calendar,
 } from "lucide-react";
 
-export default function EmployeesIndex({
+export default function TrainingEmployees({
     employees = { data: [] },
-    filterOptions = {},
-    statistics = {},
+    departments = {},
     filters = {},
-    title = "Management Karyawan",
-    subtitle = "Kelola data karyawan PT Gapura Angkasa - Bandar Udara Ngurah Rai"
+    statistics = {},
+    title = "Data Karyawan Training",
+    subtitle = "Data karyawan berdasarkan file MPGA - Menampilkan Nama dan NIP",
+    auth,
 }) {
+    // State management (sama seperti Employee Index di Firman)
     const [searchQuery, setSearchQuery] = useState(filters.search || "");
-    const [unitFilter, setUnitFilter] = useState(filters.unit_organisasi || "all");
-    const [statusFilter, setStatusFilter] = useState(filters.status_pegawai || "all");
+    const [departmentFilter, setDepartmentFilter] = useState(filters.department || "all");
     const [showFilters, setShowFilters] = useState(false);
     const [loading, setLoading] = useState(false);
 
@@ -57,10 +62,9 @@ export default function EmployeesIndex({
 
     const handleSearch = () => {
         setLoading(true);
-        router.get('/employees', {
+        router.get(route('training.employees'), {
             search: searchQuery,
-            unit_organisasi: unitFilter,
-            status_pegawai: statusFilter,
+            department: departmentFilter,
         }, {
             preserveState: true,
             preserveScroll: true,
@@ -70,10 +74,9 @@ export default function EmployeesIndex({
 
     const handleFilterChange = () => {
         setLoading(true);
-        router.get('/employees', {
+        router.get(route('training.employees'), {
             search: searchQuery,
-            unit_organisasi: unitFilter,
-            status_pegawai: statusFilter,
+            department: departmentFilter,
         }, {
             preserveState: true,
             preserveScroll: true,
@@ -83,17 +86,16 @@ export default function EmployeesIndex({
 
     const clearFilters = () => {
         setSearchQuery("");
-        setUnitFilter("all");
-        setStatusFilter("all");
+        setDepartmentFilter("all");
         setLoading(true);
-        router.get('/employees', {}, {
+        router.get(route('training.employees'), {}, {
             preserveState: true,
             preserveScroll: true,
             onFinish: () => setLoading(false),
         });
     };
 
-    // Pagination helper
+    // Pagination helper (sama seperti Firman)
     const renderPagination = () => {
         if (!employees.last_page || employees.last_page <= 1) return null;
 
@@ -104,6 +106,7 @@ export default function EmployeesIndex({
                 </div>
 
                 <div className="flex items-center gap-2">
+                    {/* First Page */}
                     <button
                         onClick={() => router.get(employees.first_page_url)}
                         disabled={employees.current_page === 1}
@@ -112,6 +115,7 @@ export default function EmployeesIndex({
                         <ChevronsLeft className="w-4 h-4" />
                     </button>
 
+                    {/* Previous Page */}
                     <button
                         onClick={() => router.get(employees.prev_page_url)}
                         disabled={!employees.prev_page_url}
@@ -120,10 +124,12 @@ export default function EmployeesIndex({
                         <ChevronLeft className="w-4 h-4" />
                     </button>
 
+                    {/* Page Numbers */}
                     <span className="px-3 py-1 text-sm font-medium text-gray-700">
                         {employees.current_page} dari {employees.last_page}
                     </span>
 
+                    {/* Next Page */}
                     <button
                         onClick={() => router.get(employees.next_page_url)}
                         disabled={!employees.next_page_url}
@@ -132,6 +138,7 @@ export default function EmployeesIndex({
                         <ChevronRight className="w-4 h-4" />
                     </button>
 
+                    {/* Last Page */}
                     <button
                         onClick={() => router.get(employees.last_page_url)}
                         disabled={employees.current_page === employees.last_page}
@@ -149,7 +156,7 @@ export default function EmployeesIndex({
             <Head title={title} />
 
             <div className="p-6 space-y-6">
-                {/* Header */}
+                {/* Header Section - Style Firman */}
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                     <div>
                         <h1 className="text-2xl font-bold text-gray-900">{title}</h1>
@@ -158,24 +165,24 @@ export default function EmployeesIndex({
 
                     <div className="flex items-center gap-3">
                         <Link
-                            href="/training"
-                            className="flex items-center gap-2 px-4 py-2 border-2 border-[#439454] text-[#439454] rounded-xl hover:bg-[#439454] hover:text-white transition-all duration-300 font-medium"
+                            href={route('training.index')}
+                            className="flex items-center gap-2 px-4 py-2 bg-[#439454] text-white rounded-xl hover:bg-[#358945] transition-all duration-300 shadow-lg hover:shadow-gapura font-medium"
                         >
-                            <UserCheck className="w-4 h-4" />
-                            Training Records
+                            <Eye className="w-4 h-4" />
+                            Lihat Training Records
                         </Link>
 
-                        <Link
-                            href="/employees/create"
-                            className="flex items-center gap-2 px-4 py-2 bg-[#439454] text-white rounded-xl hover:bg-[#358945] transition-all duration-300 shadow-lg font-medium"
+                        <button
+                            onClick={() => window.print()}
+                            className="flex items-center gap-2 px-4 py-2 border-2 border-[#439454] text-[#439454] rounded-xl hover:bg-[#439454] hover:text-white transition-all duration-300 font-medium"
                         >
-                            <Plus className="w-4 h-4" />
-                            Tambah Karyawan
-                        </Link>
+                            <FileDown className="w-4 h-4" />
+                            Export Data
+                        </button>
                     </div>
                 </div>
 
-                {/* Statistics */}
+                {/* Statistics Cards - Style Firman */}
                 <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
                     <div className="bg-gradient-to-br from-blue-50 to-blue-100 p-6 rounded-2xl border border-blue-200">
                         <div className="flex items-center gap-4">
@@ -183,7 +190,7 @@ export default function EmployeesIndex({
                                 <Users className="w-6 h-6" />
                             </div>
                             <div>
-                                <h3 className="text-lg font-bold text-gray-900">{statistics.totalEmployees || 0}</h3>
+                                <h3 className="text-lg font-bold text-gray-900">{employees.total || 0}</h3>
                                 <p className="text-sm text-gray-600">Total Karyawan</p>
                             </div>
                         </div>
@@ -192,11 +199,11 @@ export default function EmployeesIndex({
                     <div className="bg-gradient-to-br from-green-50 to-green-100 p-6 rounded-2xl border border-green-200">
                         <div className="flex items-center gap-4">
                             <div className="p-3 bg-[#439454] text-white rounded-xl">
-                                <UserCheck className="w-6 h-6" />
+                                <Building2 className="w-6 h-6" />
                             </div>
                             <div>
-                                <h3 className="text-lg font-bold text-gray-900">{statistics.activeEmployees || 0}</h3>
-                                <p className="text-sm text-gray-600">Karyawan Aktif</p>
+                                <h3 className="text-lg font-bold text-gray-900">{Object.keys(departments).length}</h3>
+                                <p className="text-sm text-gray-600">Department</p>
                             </div>
                         </div>
                     </div>
@@ -204,11 +211,11 @@ export default function EmployeesIndex({
                     <div className="bg-gradient-to-br from-purple-50 to-purple-100 p-6 rounded-2xl border border-purple-200">
                         <div className="flex items-center gap-4">
                             <div className="p-3 bg-purple-500 text-white rounded-xl">
-                                <Plus className="w-6 h-6" />
+                                <UserCheck className="w-6 h-6" />
                             </div>
                             <div>
-                                <h3 className="text-lg font-bold text-gray-900">{statistics.newEmployees || 0}</h3>
-                                <p className="text-sm text-gray-600">Karyawan Baru</p>
+                                <h3 className="text-lg font-bold text-gray-900">{statistics.active_employees || 0}</h3>
+                                <p className="text-sm text-gray-600">Karyawan Aktif</p>
                             </div>
                         </div>
                     </div>
@@ -216,17 +223,22 @@ export default function EmployeesIndex({
                     <div className="bg-gradient-to-br from-orange-50 to-orange-100 p-6 rounded-2xl border border-orange-200">
                         <div className="flex items-center gap-4">
                             <div className="p-3 bg-orange-500 text-white rounded-xl">
-                                <Building2 className="w-6 h-6" />
+                                <Calendar className="w-6 h-6" />
                             </div>
                             <div>
-                                <h3 className="text-lg font-bold text-gray-900">{statistics.totalUnits || 0}</h3>
-                                <p className="text-sm text-gray-600">Unit Organisasi</p>
+                                <h3 className="text-lg font-bold text-gray-900">
+                                    {new Date().toLocaleDateString('id-ID', {
+                                        year: 'numeric',
+                                        month: 'long'
+                                    })}
+                                </h3>
+                                <p className="text-sm text-gray-600">Data MPGA</p>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                {/* Main Content */}
+                {/* Main Content Card - Style Firman */}
                 <div className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
                     {/* Filters Header */}
                     <div className="p-6 border-b border-gray-100 bg-gray-50">
@@ -236,7 +248,7 @@ export default function EmployeesIndex({
                                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
                                 <input
                                     type="text"
-                                    placeholder="Cari nama, NIP, atau NIK..."
+                                    placeholder="Cari nama atau NIP karyawan..."
                                     value={searchQuery}
                                     onChange={(e) => setSearchQuery(e.target.value)}
                                     className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#439454] focus:border-transparent transition-all duration-300"
@@ -258,15 +270,7 @@ export default function EmployeesIndex({
                                     <ChevronDown className={`w-4 h-4 transition-transform duration-300 ${showFilters ? 'rotate-180' : ''}`} />
                                 </button>
 
-                                <button
-                                    onClick={() => window.open('/employees/export')}
-                                    className="flex items-center gap-2 px-4 py-2.5 border-2 border-blue-500 text-blue-500 rounded-xl hover:bg-blue-500 hover:text-white transition-all duration-300 font-medium"
-                                >
-                                    <FileDown className="w-4 h-4" />
-                                    Export
-                                </button>
-
-                                {(unitFilter !== 'all' || statusFilter !== 'all' || searchQuery) && (
+                                {(departmentFilter !== 'all' || searchQuery) && (
                                     <button
                                         onClick={clearFilters}
                                         className="px-4 py-2.5 text-sm text-gray-600 hover:text-[#439454] transition-colors duration-300"
@@ -281,18 +285,18 @@ export default function EmployeesIndex({
                         {showFilters && (
                             <div className="mt-4 p-4 bg-white rounded-xl border border-gray-200">
                                 <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-                                    {/* Unit Filter */}
+                                    {/* Department Filter */}
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 mb-2">
-                                            Unit Organisasi
+                                            Department
                                         </label>
                                         <select
-                                            value={unitFilter}
-                                            onChange={(e) => setUnitFilter(e.target.value)}
+                                            value={departmentFilter}
+                                            onChange={(e) => setDepartmentFilter(e.target.value)}
                                             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#439454] focus:border-transparent"
                                         >
-                                            <option value="all">Semua Unit</option>
-                                            {Object.entries(filterOptions.unitOrganisasi || {}).map(([key, name]) => (
+                                            <option value="all">Semua Department</option>
+                                            {Object.entries(departments).map(([key, name]) => (
                                                 <option key={key} value={key}>
                                                     {name}
                                                 </option>
@@ -300,26 +304,7 @@ export default function EmployeesIndex({
                                         </select>
                                     </div>
 
-                                    {/* Status Filter */}
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                                            Status Pegawai
-                                        </label>
-                                        <select
-                                            value={statusFilter}
-                                            onChange={(e) => setStatusFilter(e.target.value)}
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#439454] focus:border-transparent"
-                                        >
-                                            <option value="all">Semua Status</option>
-                                            {Object.entries(filterOptions.statusPegawai || {}).map(([key, name]) => (
-                                                <option key={key} value={key}>
-                                                    {name}
-                                                </option>
-                                            ))}
-                                        </select>
-                                    </div>
-
-                                    <div className="flex items-end">
+                                    <div className="md:col-span-2 flex items-end">
                                         <button
                                             onClick={handleFilterChange}
                                             disabled={loading}
@@ -352,19 +337,13 @@ export default function EmployeesIndex({
                                                 Nama Lengkap
                                             </th>
                                             <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                                                NIK
-                                            </th>
-                                            <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
                                                 NIP
                                             </th>
                                             <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                                                Unit Organisasi
+                                                Unit Kerja
                                             </th>
                                             <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                                                Status
-                                            </th>
-                                            <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                                                Actions
+                                                Department
                                             </th>
                                         </tr>
                                     </thead>
@@ -375,7 +354,7 @@ export default function EmployeesIndex({
                                                 className="hover:bg-gray-50 transition-colors duration-200"
                                             >
                                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                                    {index + 1}
+                                                    {(employees.current_page - 1) * employees.per_page + index + 1}
                                                 </td>
                                                 <td className="px-6 py-4 whitespace-nowrap">
                                                     <div className="flex items-center">
@@ -386,48 +365,21 @@ export default function EmployeesIndex({
                                                             <div className="text-sm font-semibold text-gray-900">
                                                                 {employee.nama_lengkap}
                                                             </div>
-                                                            <div className="text-xs text-gray-500">
-                                                                {employee.jabatan}
-                                                            </div>
                                                         </div>
                                                     </div>
-                                                </td>
-                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                    <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-                                                        {employee.nik}
-                                                    </span>
                                                 </td>
                                                 <td className="px-6 py-4 whitespace-nowrap">
                                                     <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
                                                         {employee.nip}
                                                     </span>
                                                 </td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                                    {employee.unit_kerja || '-'}
+                                                </td>
                                                 <td className="px-6 py-4 whitespace-nowrap">
                                                     <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-medium bg-[#439454]/10 text-[#439454]">
-                                                        {employee.unit_organisasi}
+                                                        {departments[employee.department] || employee.department}
                                                     </span>
-                                                </td>
-                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                    <span className={`inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-medium ${
-                                                        employee.status_pegawai === 'PEGAWAI TETAP'
-                                                            ? 'bg-green-100 text-green-800'
-                                                            : 'bg-yellow-100 text-yellow-800'
-                                                    }`}>
-                                                        {employee.status_pegawai}
-                                                    </span>
-                                                </td>
-                                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                                                    <div className="flex items-center gap-2">
-                                                        <Link
-                                                            href={`/employees/${employee.id}/edit`}
-                                                            className="text-blue-600 hover:text-blue-800 p-1 rounded"
-                                                        >
-                                                            <Edit className="w-4 h-4" />
-                                                        </Link>
-                                                        <button className="text-red-600 hover:text-red-800 p-1 rounded">
-                                                            <Trash2 className="w-4 h-4" />
-                                                        </button>
-                                                    </div>
                                                 </td>
                                             </tr>
                                         ))}
@@ -441,24 +393,44 @@ export default function EmployeesIndex({
                                     Tidak ada data karyawan
                                 </h3>
                                 <p className="text-gray-600 mb-6">
-                                    {searchQuery || unitFilter !== 'all' || statusFilter !== 'all'
+                                    {searchQuery || departmentFilter !== 'all'
                                         ? 'Tidak ada karyawan yang sesuai dengan filter yang dipilih.'
-                                        : 'Belum ada data karyawan. Tambahkan karyawan baru untuk memulai.'}
+                                        : 'Belum ada data karyawan. Import data MPGA terlebih dahulu.'}
                                 </p>
 
-                                <Link
-                                    href="/employees/create"
-                                    className="inline-flex items-center gap-2 px-6 py-3 bg-[#439454] text-white rounded-xl hover:bg-[#358945] transition-all duration-300 font-medium"
-                                >
-                                    <Plus className="w-4 h-4" />
-                                    Tambah Karyawan
-                                </Link>
+                                {!searchQuery && departmentFilter === 'all' && (
+                                    <Link
+                                        href={route('training.import')}
+                                        className="inline-flex items-center gap-2 px-6 py-3 bg-[#439454] text-white rounded-xl hover:bg-[#358945] transition-all duration-300 font-medium"
+                                    >
+                                        <FileDown className="w-4 h-4" />
+                                        Import Data MPGA
+                                    </Link>
+                                )}
                             </div>
                         )}
                     </div>
 
                     {/* Pagination */}
                     {renderPagination()}
+                </div>
+
+                {/* Info Note - Data MPGA */}
+                <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+                    <div className="flex items-start gap-3">
+                        <div className="w-5 h-5 text-blue-500 mt-0.5">
+                            <svg viewBox="0 0 20 20" fill="currentColor">
+                                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                            </svg>
+                        </div>
+                        <div>
+                            <h4 className="font-medium text-blue-900 mb-1">Informasi Data MPGA</h4>
+                            <p className="text-sm text-blue-700">
+                                Data karyawan ini diambil dari file MPGA Excel dengan struktur: <strong>Nama Lengkap</strong> dan <strong>NIP (NIPP)</strong>.
+                                Data NIK tidak tersedia dalam file MPGA original. Untuk melihat detail training dan sertifikasi, klik "Lihat Training Records".
+                            </p>
+                        </div>
+                    </div>
                 </div>
             </div>
         </DashboardLayout>

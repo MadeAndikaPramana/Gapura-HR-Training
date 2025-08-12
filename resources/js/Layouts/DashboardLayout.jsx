@@ -24,73 +24,87 @@ export default function DashboardLayout({ children, title = "Dashboard" }) {
     const { auth } = usePage().props;
     const [sidebarOpen, setSidebarOpen] = useState(false);
 
-    // Navigation items
+    // Helper function untuk check current route
+    const isCurrentRoute = (path) => {
+        if (typeof window !== 'undefined') {
+            return window.location.pathname === path || window.location.pathname.startsWith(path + '/');
+        }
+        return false;
+    };
+
+    // Navigation items - Fixed version
     const navigation = [
         {
             name: 'Dashboard',
             href: '/dashboard',
             icon: Home,
-            current: window.location.pathname === '/dashboard'
+            current: isCurrentRoute('/dashboard')
         },
         {
             name: 'Employees',
             href: '/employees',
             icon: Users,
-            current: window.location.pathname.startsWith('/employees')
+            current: isCurrentRoute('/employees')
         },
         {
             name: 'Training Records',
             href: '/training',
             icon: GraduationCap,
-            current: window.location.pathname === '/training' || (window.location.pathname.startsWith('/training') && !window.location.pathname.includes('/dashboard') && !window.location.pathname.includes('/analytics') && !window.location.pathname.includes('/reports'))
+            current: isCurrentRoute('/training') && !isCurrentRoute('/training/dashboard') && !isCurrentRoute('/training/analytics')
+        },
+        {
+            name: 'Data Karyawan Training',
+            href: '/training/employees',
+            icon: Users,
+            current: isCurrentRoute('/training/employees')
         },
         {
             name: 'Training Dashboard',
             href: '/training/dashboard',
             icon: BarChart3,
-            current: window.location.pathname === '/training/dashboard'
+            current: isCurrentRoute('/training/dashboard')
         },
         {
             name: 'Training Types',
             href: '/training-types',
             icon: BookOpen,
-            current: window.location.pathname.startsWith('/training-types')
+            current: isCurrentRoute('/training-types')
         },
         {
             name: 'Certificates',
             href: '/certificates',
             icon: Award,
-            current: window.location.pathname.startsWith('/certificates')
+            current: isCurrentRoute('/certificates')
         },
         {
             name: 'Background Checks',
             href: '/background-checks',
             icon: Shield,
-            current: window.location.pathname.startsWith('/background-checks')
+            current: isCurrentRoute('/background-checks')
         },
         {
             name: 'Schedules',
             href: '/schedules',
             icon: Calendar,
-            current: window.location.pathname.startsWith('/schedules')
+            current: isCurrentRoute('/schedules')
         },
         {
             name: 'Analytics',
             href: '/training/analytics',
             icon: TrendingUp,
-            current: window.location.pathname === '/training/analytics'
+            current: isCurrentRoute('/training/analytics')
         },
         {
             name: 'Reports',
             href: '/training/reports',
             icon: FileText,
-            current: window.location.pathname.startsWith('/training/reports')
+            current: isCurrentRoute('/training/reports')
         },
         {
             name: 'Import/Export',
             href: '/import-export',
             icon: Upload,
-            current: window.location.pathname.startsWith('/import-export')
+            current: isCurrentRoute('/import-export')
         }
     ];
 
@@ -138,7 +152,7 @@ export default function DashboardLayout({ children, title = "Dashboard" }) {
                     <div className="sticky top-0 z-10 flex-shrink-0 flex h-16 bg-white shadow border-b border-gray-200">
                         <button
                             type="button"
-                            className="px-4 border-r border-gray-200 text-gray-500 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-gapura-green md:hidden"
+                            className="px-4 border-r border-gray-200 text-gray-500 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-[#439454] md:hidden"
                             onClick={() => setSidebarOpen(true)}
                         >
                             <Menu className="h-6 w-6" />
@@ -150,8 +164,8 @@ export default function DashboardLayout({ children, title = "Dashboard" }) {
                             <div className="ml-4 flex items-center md:ml-6">
                                 {/* Profile dropdown */}
                                 <div className="ml-3 relative">
-                                    <div className="flex items-center text-sm rounded-full focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gapura-green">
-                                        <div className="h-8 w-8 rounded-full bg-gapura-green flex items-center justify-center">
+                                    <div className="flex items-center text-sm rounded-full focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#439454]">
+                                        <div className="h-8 w-8 rounded-full bg-[#439454] flex items-center justify-center">
                                             <span className="text-sm font-medium text-white">
                                                 {auth.user.name.charAt(0).toUpperCase()}
                                             </span>
@@ -176,7 +190,7 @@ export default function DashboardLayout({ children, title = "Dashboard" }) {
     );
 }
 
-// Sidebar content component
+// Sidebar content component - Fixed version
 function SidebarContent({ navigation, userNavigation, auth }) {
     return (
         <div className="flex flex-col h-0 flex-1 border-r border-gray-200 bg-white">
@@ -185,7 +199,7 @@ function SidebarContent({ navigation, userNavigation, auth }) {
                 <div className="flex items-center flex-shrink-0 px-4">
                     <div className="flex items-center">
                         <div className="flex-shrink-0">
-                            <div className="h-10 w-10 rounded-lg bg-gapura-green flex items-center justify-center">
+                            <div className="h-10 w-10 rounded-lg bg-[#439454] flex items-center justify-center">
                                 <GraduationCap className="h-6 w-6 text-white" />
                             </div>
                         </div>
@@ -206,13 +220,13 @@ function SidebarContent({ navigation, userNavigation, auth }) {
                                 href={item.href}
                                 className={`${
                                     item.current
-                                        ? 'bg-gapura-green text-white'
-                                        : 'text-gray-700 hover:bg-gray-100 hover:text-gapura-green'
+                                        ? 'bg-[#439454] text-white'
+                                        : 'text-gray-700 hover:bg-gray-100 hover:text-[#439454]'
                                 } group flex items-center px-2 py-2 text-sm font-medium rounded-md transition-colors duration-200`}
                             >
                                 <Icon
                                     className={`${
-                                        item.current ? 'text-white' : 'text-gray-400 group-hover:text-gapura-green'
+                                        item.current ? 'text-white' : 'text-gray-400 group-hover:text-[#439454]'
                                     } mr-3 flex-shrink-0 h-5 w-5`}
                                 />
                                 {item.name}
@@ -226,7 +240,7 @@ function SidebarContent({ navigation, userNavigation, auth }) {
             <div className="flex-shrink-0 flex border-t border-gray-200 p-4">
                 <div className="flex items-center w-full">
                     <div className="flex-shrink-0">
-                        <div className="h-8 w-8 rounded-full bg-gapura-green flex items-center justify-center">
+                        <div className="h-8 w-8 rounded-full bg-[#439454] flex items-center justify-center">
                             <span className="text-sm font-medium text-white">
                                 {auth.user.name.charAt(0).toUpperCase()}
                             </span>

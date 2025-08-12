@@ -1,702 +1,172 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { Head, Link, router } from "@inertiajs/react";
 import DashboardLayout from "@/Layouts/DashboardLayout";
 import {
     Search,
     Plus,
-    FileDown,
-    FileUp,
+    Filter,
     Eye,
     Edit,
     Trash2,
-    Filter,
-    Download,
-    Award,
-    AlertTriangle,
-    Clock,
-    Calendar,
-    ChevronDown,
-    ChevronUp,
-    MoreVertical,
-    GraduationCap,
     Users,
-    CheckCircle,
-    XCircle,
-    AlertCircle,
-    RefreshCw,
-    Send,
-    Copy,
-    Building,
-    Mail,
-    Phone,
-    Badge,
-    CreditCard,
-    FileText,
-    Bell,
-    Settings,
+    Award,
+    Clock,
+    AlertTriangle
 } from "lucide-react";
 
-export default function Index({
-    trainingRecords,
-    filters,
-    trainingTypes,
-    departments,
-    stats,
-    notifications,
-    title,
-    subtitle,
-    success,
-    error,
-    auth,
+export default function TrainingIndex({
+    trainingRecords = { data: [] },
+    filterOptions = {},
+    statistics = {},
+    filters = {},
+    title = "Training Records Management",
+    subtitle = "Kelola data pelatihan dan sertifikasi karyawan"
 }) {
-    // State management
     const [searchQuery, setSearchQuery] = useState(filters.search || "");
-    const [trainingTypeFilter, setTrainingTypeFilter] = useState(
-        filters.training_type || "all"
-    );
-    const [departmentFilter, setDepartmentFilter] = useState(
-        filters.department || "all"
-    );
-    const [statusFilter, setStatusFilter] = useState(filters.status || "all");
-    const [dateFromFilter, setDateFromFilter] = useState(filters.date_from || "");
-    const [dateToFilter, setDateToFilter] = useState(filters.date_to || "");
-    const [showFilters, setShowFilters] = useState(false);
-    const [selectedRecords, setSelectedRecords] = useState([]);
-    const [bulkAction, setBulkAction] = useState("");
     const [loading, setLoading] = useState(false);
-
-    // Debounced search
-    const [searchTimeout, setSearchTimeout] = useState(null);
-
-    // Sort state
-    const [sortField, setSortField] = useState(filters.sort || "expiry_date");
-    const [sortDirection, setSortDirection] = useState(
-        filters.direction || "asc"
-    );
-
-    // Apply filters
-    const applyFilters = () => {
-        const params = {
-            search: searchQuery,
-            training_type: trainingTypeFilter,
-            department: departmentFilter,
-            status: statusFilter,
-            date_from: dateFromFilter,
-            date_to: dateToFilter,
-            sort: sortField,
-            direction: sortDirection,
-        };
-
-        // Remove empty filters
-        Object.keys(params).forEach((key) => {
-            if (!params[key] || params[key] === "all") {
-                delete params[key];
-            }
-        });
-
-        setLoading(true);
-        router.get(route("training.index"), params, {
-            preserveState: true,
-            onFinish: () => setLoading(false),
-        });
-    };
-
-    // Debounced search
-    useEffect(() => {
-        if (searchTimeout) {
-            clearTimeout(searchTimeout);
-        }
-
-        const timeout = setTimeout(() => {
-            if (searchQuery !== filters.search) {
-                applyFilters();
-            }
-        }, 500);
-
-        setSearchTimeout(timeout);
-
-        return () => clearTimeout(timeout);
-    }, [searchQuery]);
-
-    // Apply filters when other filters change
-    useEffect(() => {
-        if (
-            trainingTypeFilter !== filters.training_type ||
-            departmentFilter !== filters.department ||
-            statusFilter !== filters.status ||
-            dateFromFilter !== filters.date_from ||
-            dateToFilter !== filters.date_to
-        ) {
-            applyFilters();
-        }
-    }, [trainingTypeFilter, departmentFilter, statusFilter, dateFromFilter, dateToFilter]);
-
-    // Sort function
-    const handleSort = (field) => {
-        const direction =
-            sortField === field && sortDirection === "asc" ? "desc" : "asc";
-        setSortField(field);
-        setSortDirection(direction);
-
-        router.get(
-            route("training.index"),
-            {
-                ...filters,
-                sort: field,
-                direction: direction,
-            },
-            { preserveState: true }
-        );
-    };
-
-    // Select/deselect records
-    const toggleRecordSelection = (recordId) => {
-        setSelectedRecords((prev) =>
-            prev.includes(recordId)
-                ? prev.filter((id) => id !== recordId)
-                : [...prev, recordId]
-        );
-    };
-
-    const selectAllRecords = () => {
-        if (selectedRecords.length === trainingRecords.data.length) {
-            setSelectedRecords([]);
-        } else {
-            setSelectedRecords(trainingRecords.data.map((record) => record.id));
-        }
-    };
-
-    // Bulk operations
-    const handleBulkAction = () => {
-        if (!bulkAction || selectedRecords.length === 0) return;
-
-        if (bulkAction === 'export') {
-            router.post(route("training.export-selected"), {
-                training_record_ids: selectedRecords,
-            });
-        } else if (bulkAction === 'generate_certificates') {
-            router.post(route("training.bulk-generate-certificates"), {
-                training_record_ids: selectedRecords,
-            });
-        } else {
-            router.post(route("training.bulk-update"), {
-                training_record_ids: selectedRecords,
-                action: bulkAction,
-            });
-        }
-
-        setSelectedRecords([]);
-        setBulkAction("");
-    };
-
-    // Get status badge
-    const getStatusBadge = (record) => {
-        const now = new Date();
-        const expiryDate = new Date(record.expiry_date);
-        const thirtyDaysFromNow = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
-
-        if (expiryDate < now) {
-            return (
-                <span className="badge-gapura-red">
-                    <XCircle className="w-3 h-3 mr-1" />
-                    Expired
-                </span>
-            );
-        } else if (expiryDate <= thirtyDaysFromNow) {
-            return (
-                <span className="badge-gapura-yellow">
-                    <AlertCircle className="w-3 h-3 mr-1" />
-                    Expiring Soon
-                </span>
-            );
-        } else {
-            return (
-                <span className="badge-gapura-green">
-                    <CheckCircle className="w-3 h-3 mr-1" />
-                    Valid
-                </span>
-            );
-        }
-    };
-
-    // Get days until expiry
-    const getDaysUntilExpiry = (expiryDate) => {
-        const now = new Date();
-        const expiry = new Date(expiryDate);
-        const diffTime = expiry - now;
-        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-        return diffDays;
-    };
-
-    // Format currency
-    const formatCurrency = (amount) => {
-        return new Intl.NumberFormat('id-ID', {
-            style: 'currency',
-            currency: 'IDR',
-            minimumFractionDigits: 0,
-        }).format(amount);
-    };
 
     return (
         <DashboardLayout>
             <Head title={title} />
 
-            <div className="space-y-6">
+            <div className="p-6 space-y-6">
                 {/* Header */}
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                     <div>
-                        <h1 className="text-2xl font-bold text-gray-900">
-                            {title}
-                        </h1>
-                        <p className="text-gray-600 mt-1">{subtitle}</p>
+                        <h1 className="text-2xl font-bold text-gray-900">{title}</h1>
+                        <p className="text-sm text-gray-600 mt-1">{subtitle}</p>
                     </div>
-                    <div className="flex items-center space-x-3">
-                        <button
-                            onClick={() => router.get(route("training.download-import-template"))}
-                            className="btn-gapura-secondary"
+
+                    <div className="flex items-center gap-3">
+                        <Link
+                            href="/training/employees"
+                            className="flex items-center gap-2 px-4 py-2 border-2 border-[#439454] text-[#439454] rounded-xl hover:bg-[#439454] hover:text-white transition-all duration-300 font-medium"
                         >
-                            <FileDown className="w-4 h-4 mr-2" />
-                            Template
-                        </button>
-                        <button
-                            onClick={() => router.get(route("training.export"))}
-                            className="btn-gapura-secondary"
+                            <Users className="w-4 h-4" />
+                            Data Karyawan
+                        </Link>
+
+                        <Link
+                            href="/training/create"
+                            className="flex items-center gap-2 px-4 py-2 bg-[#439454] text-white rounded-xl hover:bg-[#358945] transition-all duration-300 shadow-lg font-medium"
                         >
-                            <FileDown className="w-4 h-4 mr-2" />
-                            Export All
-                        </button>
-                        <Link href={route("training.create")} className="btn-gapura">
-                            <Plus className="w-4 h-4 mr-2" />
+                            <Plus className="w-4 h-4" />
                             Add Training
                         </Link>
                     </div>
                 </div>
 
-                {/* Statistics Cards */}
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                    <div className="card-gapura p-6">
-                        <div className="flex items-center">
-                            <div className="p-3 bg-blue-100 rounded-lg">
-                                <GraduationCap className="w-8 h-8 text-blue-600" />
+                {/* Statistics */}
+                <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+                    <div className="bg-gradient-to-br from-blue-50 to-blue-100 p-6 rounded-2xl border border-blue-200">
+                        <div className="flex items-center gap-4">
+                            <div className="p-3 bg-blue-500 text-white rounded-xl">
+                                <Users className="w-6 h-6" />
                             </div>
-                            <div className="ml-4">
-                                <p className="text-sm font-medium text-gray-600">
-                                    Total Records
-                                </p>
-                                <p className="text-2xl font-bold text-gray-900">
-                                    {stats.total_records}
-                                </p>
+                            <div>
+                                <h3 className="text-lg font-bold text-gray-900">{statistics.total_employees || 0}</h3>
+                                <p className="text-sm text-gray-600">Total Karyawan</p>
                             </div>
                         </div>
                     </div>
 
-                    <div className="card-gapura p-6">
-                        <div className="flex items-center">
-                            <div className="p-3 bg-green-100 rounded-lg">
-                                <CheckCircle className="w-8 h-8 text-green-600" />
+                    <div className="bg-gradient-to-br from-green-50 to-green-100 p-6 rounded-2xl border border-green-200">
+                        <div className="flex items-center gap-4">
+                            <div className="p-3 bg-[#439454] text-white rounded-xl">
+                                <Award className="w-6 h-6" />
                             </div>
-                            <div className="ml-4">
-                                <p className="text-sm font-medium text-gray-600">
-                                    Valid Certificates
-                                </p>
-                                <p className="text-2xl font-bold text-gray-900">
-                                    {stats.valid_records}
-                                </p>
+                            <div>
+                                <h3 className="text-lg font-bold text-gray-900">{statistics.active_certificates || 0}</h3>
+                                <p className="text-sm text-gray-600">Active Certificates</p>
                             </div>
                         </div>
                     </div>
 
-                    <div className="card-gapura p-6">
-                        <div className="flex items-center">
-                            <div className="p-3 bg-yellow-100 rounded-lg">
-                                <AlertTriangle className="w-8 h-8 text-yellow-600" />
+                    <div className="bg-gradient-to-br from-orange-50 to-orange-100 p-6 rounded-2xl border border-orange-200">
+                        <div className="flex items-center gap-4">
+                            <div className="p-3 bg-orange-500 text-white rounded-xl">
+                                <Clock className="w-6 h-6" />
                             </div>
-                            <div className="ml-4">
-                                <p className="text-sm font-medium text-gray-600">
-                                    Expiring Soon
-                                </p>
-                                <p className="text-2xl font-bold text-gray-900">
-                                    {stats.expiring_soon}
-                                </p>
+                            <div>
+                                <h3 className="text-lg font-bold text-gray-900">{statistics.expiring_soon || 0}</h3>
+                                <p className="text-sm text-gray-600">Expiring Soon</p>
                             </div>
                         </div>
                     </div>
 
-                    <div className="card-gapura p-6">
-                        <div className="flex items-center">
-                            <div className="p-3 bg-red-100 rounded-lg">
-                                <XCircle className="w-8 h-8 text-red-600" />
+                    <div className="bg-gradient-to-br from-red-50 to-red-100 p-6 rounded-2xl border border-red-200">
+                        <div className="flex items-center gap-4">
+                            <div className="p-3 bg-red-500 text-white rounded-xl">
+                                <AlertTriangle className="w-6 h-6" />
                             </div>
-                            <div className="ml-4">
-                                <p className="text-sm font-medium text-gray-600">
-                                    Expired
-                                </p>
-                                <p className="text-2xl font-bold text-gray-900">
-                                    {stats.expired_records}
-                                </p>
+                            <div>
+                                <h3 className="text-lg font-bold text-gray-900">{statistics.expired || 0}</h3>
+                                <p className="text-sm text-gray-600">Expired</p>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                {/* Notifications Panel */}
-                {notifications.expiring_certificates.length > 0 && (
-                    <div className="card-gapura p-4 border-l-4 border-yellow-400 bg-yellow-50">
-                        <div className="flex items-center">
-                            <Bell className="w-5 h-5 text-yellow-600 mr-2" />
-                            <h3 className="text-sm font-medium text-yellow-800">
-                                Certificates Expiring Soon
-                            </h3>
-                        </div>
-                        <div className="mt-2 text-sm text-yellow-700">
-                            {notifications.expiring_certificates.length} certificates are expiring within 30 days.
-                            <button
-                                onClick={() => router.post(route("training.send-expiry-notifications"))}
-                                className="ml-2 text-yellow-800 hover:text-yellow-900 underline"
-                            >
-                                Send Notifications
-                            </button>
-                        </div>
-                    </div>
-                )}
-
-                {/* Filters and Search */}
-                <div className="card-gapura p-6">
-                    <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between space-y-4 lg:space-y-0">
-                        {/* Search */}
-                        <div className="relative flex-1 max-w-lg">
-                            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-                            <input
-                                type="text"
-                                placeholder="Search training records..."
-                                className="input-gapura pl-10"
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                            />
-                        </div>
-
-                        {/* Filter Toggle */}
-                        <div className="flex items-center space-x-3">
-                            <button
-                                onClick={() => setShowFilters(!showFilters)}
-                                className="btn-gapura-secondary"
-                            >
-                                <Filter className="w-4 h-4 mr-2" />
-                                Filters
-                                {showFilters ? (
-                                    <ChevronUp className="w-4 h-4 ml-2" />
-                                ) : (
-                                    <ChevronDown className="w-4 h-4 ml-2" />
-                                )}
-                            </button>
-                        </div>
-                    </div>
-
-                    {/* Filter Options */}
-                    {showFilters && (
-                        <div className="mt-4 pt-4 border-t border-gray-200">
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                                        Training Type
-                                    </label>
-                                    <select
-                                        className="input-gapura"
-                                        value={trainingTypeFilter}
-                                        onChange={(e) => setTrainingTypeFilter(e.target.value)}
-                                    >
-                                        <option value="all">All Types</option>
-                                        {trainingTypes.map((type) => (
-                                            <option key={type.id} value={type.id}>
-                                                {type.name}
-                                            </option>
-                                        ))}
-                                    </select>
-                                </div>
-
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                                        Department
-                                    </label>
-                                    <select
-                                        className="input-gapura"
-                                        value={departmentFilter}
-                                        onChange={(e) => setDepartmentFilter(e.target.value)}
-                                    >
-                                        <option value="all">All Departments</option>
-                                        {departments.map((dept) => (
-                                            <option key={dept} value={dept}>
-                                                {dept}
-                                            </option>
-                                        ))}
-                                    </select>
-                                </div>
-
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                                        Status
-                                    </label>
-                                    <select
-                                        className="input-gapura"
-                                        value={statusFilter}
-                                        onChange={(e) => setStatusFilter(e.target.value)}
-                                    >
-                                        <option value="all">All Status</option>
-                                        <option value="valid">Valid</option>
-                                        <option value="expiring">Expiring Soon</option>
-                                        <option value="expired">Expired</option>
-                                    </select>
-                                </div>
-
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                                        Date From
-                                    </label>
-                                    <input
-                                        type="date"
-                                        className="input-gapura"
-                                        value={dateFromFilter}
-                                        onChange={(e) => setDateFromFilter(e.target.value)}
-                                    />
-                                </div>
-
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                                        Date To
-                                    </label>
-                                    <input
-                                        type="date"
-                                        className="input-gapura"
-                                        value={dateToFilter}
-                                        onChange={(e) => setDateToFilter(e.target.value)}
-                                    />
-                                </div>
+                {/* Main Content */}
+                <div className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
+                    {/* Search Header */}
+                    <div className="p-6 border-b border-gray-100 bg-gray-50">
+                        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                            <div className="relative flex-1 max-w-md">
+                                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                                <input
+                                    type="text"
+                                    placeholder="Cari training records..."
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                    className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#439454] focus:border-transparent"
+                                />
                             </div>
                         </div>
-                    )}
-                </div>
-
-                {/* Bulk Actions */}
-                {selectedRecords.length > 0 && (
-                    <div className="card-gapura p-4">
-                        <div className="flex items-center justify-between">
-                            <div className="flex items-center space-x-4">
-                                <span className="text-sm text-gray-600">
-                                    {selectedRecords.length} record(s) selected
-                                </span>
-                                <select
-                                    className="input-gapura"
-                                    value={bulkAction}
-                                    onChange={(e) => setBulkAction(e.target.value)}
-                                >
-                                    <option value="">Select Action</option>
-                                    <option value="export">Export Selected</option>
-                                    <option value="generate_certificates">Generate Certificates</option>
-                                    <option value="extend">Extend Expiry</option>
-                                    <option value="update_provider">Update Provider</option>
-                                </select>
-                            </div>
-                            <button
-                                onClick={handleBulkAction}
-                                disabled={!bulkAction}
-                                className="btn-gapura disabled:opacity-50"
-                            >
-                                Apply Action
-                            </button>
-                        </div>
                     </div>
-                )}
 
-                {/* Training Records Table */}
-                <div className="card-gapura overflow-hidden">
+                    {/* Table */}
                     <div className="overflow-x-auto">
-                        <table className="table-gapura">
-                            <thead>
+                        <table className="w-full">
+                            <thead className="bg-gray-50 border-b border-gray-200">
                                 <tr>
-                                    <th className="w-4">
-                                        <input
-                                            type="checkbox"
-                                            checked={
-                                                trainingRecords.data.length > 0 &&
-                                                selectedRecords.length === trainingRecords.data.length
-                                            }
-                                            onChange={selectAllRecords}
-                                            className="rounded border-gray-300 text-gapura-green focus:ring-gapura-green"
-                                        />
-                                    </th>
-                                    <th>
-                                        <button
-                                            onClick={() => handleSort("employee_name")}
-                                            className="flex items-center space-x-1 hover:text-gapura-green"
-                                        >
-                                            <span>Employee</span>
-                                            {sortField === "employee_name" &&
-                                                (sortDirection === "asc" ? (
-                                                    <ChevronUp className="w-4 h-4" />
-                                                ) : (
-                                                    <ChevronDown className="w-4 h-4" />
-                                                ))}
-                                        </button>
-                                    </th>
-                                    <th>
-                                        <button
-                                            onClick={() => handleSort("training_type")}
-                                            className="flex items-center space-x-1 hover:text-gapura-green"
-                                        >
-                                            <span>Training Type</span>
-                                            {sortField === "training_type" &&
-                                                (sortDirection === "asc" ? (
-                                                    <ChevronUp className="w-4 h-4" />
-                                                ) : (
-                                                    <ChevronDown className="w-4 h-4" />
-                                                ))}
-                                        </button>
-                                    </th>
-                                    <th>Certificate</th>
-                                    <th>
-                                        <button
-                                            onClick={() => handleSort("issue_date")}
-                                            className="flex items-center space-x-1 hover:text-gapura-green"
-                                        >
-                                            <span>Issue Date</span>
-                                            {sortField === "issue_date" &&
-                                                (sortDirection === "asc" ? (
-                                                    <ChevronUp className="w-4 h-4" />
-                                                ) : (
-                                                    <ChevronDown className="w-4 h-4" />
-                                                ))}
-                                        </button>
-                                    </th>
-                                    <th>
-                                        <button
-                                            onClick={() => handleSort("expiry_date")}
-                                            className="flex items-center space-x-1 hover:text-gapura-green"
-                                        >
-                                            <span>Expiry Date</span>
-                                            {sortField === "expiry_date" &&
-                                                (sortDirection === "asc" ? (
-                                                    <ChevronUp className="w-4 h-4" />
-                                                ) : (
-                                                    <ChevronDown className="w-4 h-4" />
-                                                ))}
-                                        </button>
-                                    </th>
-                                    <th>Status</th>
-                                    <th>Provider</th>
-                                    <th>Actions</th>
+                                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Employee</th>
+                                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Training Type</th>
+                                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Certificate</th>
+                                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Valid Until</th>
+                                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Status</th>
+                                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Actions</th>
                                 </tr>
                             </thead>
-                            <tbody>
+                            <tbody className="bg-white divide-y divide-gray-200">
                                 {trainingRecords.data.map((record) => (
                                     <tr key={record.id} className="hover:bg-gray-50">
-                                        <td>
-                                            <input
-                                                type="checkbox"
-                                                checked={selectedRecords.includes(record.id)}
-                                                onChange={() => toggleRecordSelection(record.id)}
-                                                className="rounded border-gray-300 text-gapura-green focus:ring-gapura-green"
-                                            />
+                                        <td className="px-6 py-4 whitespace-nowrap">
+                                            <div className="text-sm font-medium text-gray-900">{record.employee_name}</div>
                                         </td>
-                                        <td>
-                                            <div className="flex items-center">
-                                                <div className="flex-shrink-0 h-10 w-10">
-                                                    <div className="h-10 w-10 rounded-full bg-gapura-green flex items-center justify-center">
-                                                        <span className="text-sm font-medium text-white">
-                                                            {record.employee.name
-                                                                .charAt(0)
-                                                                .toUpperCase()}
-                                                        </span>
-                                                    </div>
-                                                </div>
-                                                <div className="ml-4">
-                                                    <div className="text-sm font-medium text-gray-900">
-                                                        {record.employee.name}
-                                                    </div>
-                                                    <div className="text-sm text-gray-500">
-                                                        {record.employee.nip} • {record.employee.department}
-                                                    </div>
-                                                </div>
-                                            </div>
+                                        <td className="px-6 py-4 whitespace-nowrap">
+                                            <div className="text-sm text-gray-900">{record.training_type}</div>
                                         </td>
-                                        <td>
-                                            <div className="text-sm font-medium text-gray-900">
-                                                {record.training_type.name}
-                                            </div>
-                                            <div className="text-sm text-gray-500">
-                                                {record.training_type.category}
-                                            </div>
+                                        <td className="px-6 py-4 whitespace-nowrap">
+                                            <span className="text-xs font-mono bg-gray-100 px-2 py-1 rounded">{record.certificate_number}</span>
                                         </td>
-                                        <td>
-                                            <div className="text-sm text-gray-900">
-                                                {record.certificate_number || 'Not Generated'}
-                                            </div>
-                                            {record.certificate_number && (
-                                                <button
-                                                    onClick={() => router.get(
-                                                        route("training.certificate.download", record)
-                                                    )}
-                                                    className="text-sm text-blue-600 hover:text-blue-900 flex items-center"
-                                                >
-                                                    <Download className="w-3 h-3 mr-1" />
-                                                    Download
-                                                </button>
-                                            )}
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                            {record.valid_until}
                                         </td>
-                                        <td>
-                                            <div className="text-sm text-gray-900">
-                                                {new Date(record.issue_date).toLocaleDateString('id-ID')}
-                                            </div>
+                                        <td className="px-6 py-4 whitespace-nowrap">
+                                            <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
+                                                {record.status}
+                                            </span>
                                         </td>
-                                        <td>
-                                            <div className="text-sm text-gray-900">
-                                                {new Date(record.expiry_date).toLocaleDateString('id-ID')}
-                                            </div>
-                                            <div className="text-xs text-gray-500">
-                                                {getDaysUntilExpiry(record.expiry_date)} days
-                                            </div>
-                                        </td>
-                                        <td>{getStatusBadge(record)}</td>
-                                        <td>
-                                            <div className="text-sm text-gray-900">
-                                                {record.training_provider || 'N/A'}
-                                            </div>
-                                            {record.cost && (
-                                                <div className="text-xs text-gray-500">
-                                                    {formatCurrency(record.cost)}
-                                                </div>
-                                            )}
-                                        </td>
-                                        <td>
-                                            <div className="flex items-center space-x-2">
-                                                <Link
-                                                    href={route("training.show", record)}
-                                                    className="text-blue-600 hover:text-blue-900"
-                                                    title="View Details"
-                                                >
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                            <div className="flex items-center gap-2">
+                                                <button className="text-[#439454] hover:text-[#358945]">
                                                     <Eye className="w-4 h-4" />
-                                                </Link>
-                                                <Link
-                                                    href={route("training.edit", record)}
-                                                    className="text-green-600 hover:text-green-900"
-                                                    title="Edit Training"
-                                                >
+                                                </button>
+                                                <button className="text-blue-600 hover:text-blue-800">
                                                     <Edit className="w-4 h-4" />
-                                                </Link>
-                                                <button
-                                                    onClick={() => {
-                                                        if (
-                                                            confirm(
-                                                                "Are you sure you want to delete this training record?"
-                                                            )
-                                                        ) {
-                                                            router.delete(
-                                                                route("training.destroy", record)
-                                                            );
-                                                        }
-                                                    }}
-                                                    className="text-red-600 hover:text-red-900"
-                                                    title="Delete Training"
-                                                >
+                                                </button>
+                                                <button className="text-red-600 hover:text-red-800">
                                                     <Trash2 className="w-4 h-4" />
                                                 </button>
                                             </div>
@@ -706,46 +176,7 @@ export default function Index({
                             </tbody>
                         </table>
                     </div>
-
-                    {/* Pagination */}
-                    {trainingRecords.links && (
-                        <div className="px-6 py-4 border-t border-gray-200">
-                            <div className="flex items-center justify-between">
-                                <div className="text-sm text-gray-700">
-                                    Showing {trainingRecords.from} to {trainingRecords.to} of{" "}
-                                    {trainingRecords.total} results
-                                </div>
-                                <div className="flex items-center space-x-2">
-                                    {trainingRecords.links.map((link, index) => (
-                                        <button
-                                            key={index}
-                                            onClick={() => router.get(link.url)}
-                                            disabled={!link.url}
-                                            className={`px-3 py-1 text-sm rounded ${
-                                                link.active
-                                                    ? "bg-gapura-green text-white"
-                                                    : "bg-white text-gray-700 border border-gray-300 hover:bg-gray-50"
-                                            } disabled:opacity-50 disabled:cursor-not-allowed`}
-                                            dangerouslySetInnerHTML={{
-                                                __html: link.label,
-                                            }}
-                                        />
-                                    ))}
-                                </div>
-                            </div>
-                        </div>
-                    )}
                 </div>
-
-                {/* Loading Overlay */}
-                {loading && (
-                    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                        <div className="bg-white rounded-lg p-6 flex items-center space-x-3">
-                            <div className="spinner-gapura w-6 h-6"></div>
-                            <span className="text-gray-600">Loading...</span>
-                        </div>
-                    </div>
-                )}
             </div>
         </DashboardLayout>
     );

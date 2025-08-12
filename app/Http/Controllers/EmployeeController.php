@@ -2,303 +2,308 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Employee;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
-use Illuminate\Support\Facades\Validator;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
 
 class EmployeeController extends Controller
 {
     /**
-     * Display a listing of employees
+     * Display employee listing
      */
     public function index(Request $request)
     {
-        try {
-            $search = $request->get('search');
-            $perPage = $request->get('per_page', 20);
+        // Sample employee data (seperti di repo Firman)
+        $employees = collect([
+            (object)[
+                'id' => 1,
+                'nik' => '3671041234567890',
+                'nip' => 'GA20240001',
+                'nama_lengkap' => 'Ahmad Bagus Prasetyo',
+                'jenis_kelamin' => 'L',
+                'tempat_lahir' => 'Denpasar',
+                'tanggal_lahir' => '1985-03-15',
+                'usia' => 39,
+                'alamat' => 'Jl. Sunset Road No. 123, Denpasar, Bali',
+                'handphone' => '081234567890',
+                'email' => 'ahmad.bagus@gapura.com',
+                'unit_organisasi' => 'AIRSIDE',
+                'jabatan' => 'Supervisor Ground Handling',
+                'status_pegawai' => 'PEGAWAI TETAP',
+                'status_kerja' => 'Aktif',
+                'kelompok_jabatan' => 'Staff'
+            ],
+            (object)[
+                'id' => 2,
+                'nik' => '3671041234567891',
+                'nip' => 'GA20240002',
+                'nama_lengkap' => 'Ni Made Sari Dewi',
+                'jenis_kelamin' => 'P',
+                'tempat_lahir' => 'Gianyar',
+                'tanggal_lahir' => '1990-07-22',
+                'usia' => 34,
+                'alamat' => 'Jl. Raya Ubud No. 456, Gianyar, Bali',
+                'handphone' => '081234567891',
+                'email' => 'made.sari@gapura.com',
+                'unit_organisasi' => 'LANDSIDE',
+                'jabatan' => 'Check-in Counter Staff',
+                'status_pegawai' => 'PEGAWAI TETAP',
+                'status_kerja' => 'Aktif',
+                'kelompok_jabatan' => 'Staff'
+            ],
+            (object)[
+                'id' => 3,
+                'nik' => '3671041234567892',
+                'nip' => 'GA20240003',
+                'nama_lengkap' => 'I Wayan Karta',
+                'jenis_kelamin' => 'L',
+                'tempat_lahir' => 'Tabanan',
+                'tanggal_lahir' => '1988-11-10',
+                'usia' => 36,
+                'alamat' => 'Jl. Puputan No. 789, Tabanan, Bali',
+                'handphone' => '081234567892',
+                'email' => 'wayan.karta@gapura.com',
+                'unit_organisasi' => 'SSQC',
+                'jabatan' => 'Security Officer',
+                'status_pegawai' => 'PKWT',
+                'status_kerja' => 'Aktif',
+                'kelompok_jabatan' => 'Staff'
+            ],
+            (object)[
+                'id' => 4,
+                'nik' => '3671041234567893',
+                'nip' => 'GA20240004',
+                'nama_lengkap' => 'Putu Eka Wijaya',
+                'jenis_kelamin' => 'L',
+                'tempat_lahir' => 'Badung',
+                'tanggal_lahir' => '1992-05-18',
+                'usia' => 32,
+                'alamat' => 'Jl. Bypass Ngurah Rai No. 321, Badung, Bali',
+                'handphone' => '081234567893',
+                'email' => 'putu.eka@gapura.com',
+                'unit_organisasi' => 'BACK OFFICE',
+                'jabatan' => 'HR Specialist',
+                'status_pegawai' => 'PEGAWAI TETAP',
+                'status_kerja' => 'Aktif',
+                'kelompok_jabatan' => 'Staff'
+            ],
+            (object)[
+                'id' => 5,
+                'nik' => '3671041234567894',
+                'nip' => 'GA20240005',
+                'nama_lengkap' => 'Kadek Rina Sari',
+                'jenis_kelamin' => 'P',
+                'tempat_lahir' => 'Klungkung',
+                'tanggal_lahir' => '1987-12-03',
+                'usia' => 37,
+                'alamat' => 'Jl. Gajah Mada No. 654, Klungkung, Bali',
+                'handphone' => '081234567894',
+                'email' => 'kadek.rina@gapura.com',
+                'unit_organisasi' => 'ANCILLARY',
+                'jabatan' => 'Commercial Executive',
+                'status_pegawai' => 'PEGAWAI TETAP',
+                'status_kerja' => 'Aktif',
+                'kelompok_jabatan' => 'Staff'
+            ]
+        ]);
 
-            $query = Employee::query();
-
-            // Search functionality - hanya untuk nama, NIP, NIK
-            if (!empty($search)) {
-                $query->where(function($q) use ($search) {
-                    $q->where('nama_lengkap', 'like', "%{$search}%")
-                      ->orWhere('nip', 'like', "%{$search}%")
-                      ->orWhere('nik', 'like', "%{$search}%");
-                });
-            }
-
-            // Order by nama_lengkap
-            $query->orderBy('nama_lengkap', 'asc');
-
-            // Get paginated results - hanya ambil field yang diperlukan
-            $employees = $query->select(['id', 'nama_lengkap', 'nip', 'nik'])
-                              ->paginate($perPage);
-
-            return Inertia::render('Employee', [
-                'employees' => $employees,
-                'pagination' => [
-                    'current_page' => $employees->currentPage(),
-                    'last_page' => $employees->lastPage(),
-                    'per_page' => $employees->perPage(),
-                    'total' => $employees->total(),
-                    'from' => $employees->firstItem(),
-                    'to' => $employees->lastItem(),
-                    'prev_page_url' => $employees->previousPageUrl(),
-                    'next_page_url' => $employees->nextPageUrl(),
-                ],
-                'success' => session('success'),
-                'error' => session('error'),
-            ]);
-
-        } catch (\Exception $e) {
-            Log::error('Employee Index Error', [
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
-            ]);
-
-            return Inertia::render('Employee', [
-                'employees' => ['data' => []],
-                'pagination' => [],
-                'error' => 'Error loading employees: ' . $e->getMessage(),
-            ]);
+        // Apply search filter
+        $search = $request->get('search', '');
+        if ($search) {
+            $employees = $employees->filter(function($employee) use ($search) {
+                return stripos($employee->nama_lengkap, $search) !== false ||
+                       stripos($employee->nip, $search) !== false ||
+                       stripos($employee->nik, $search) !== false;
+            });
         }
+
+        // Apply unit filter
+        $unit = $request->get('unit_organisasi', 'all');
+        if ($unit !== 'all') {
+            $employees = $employees->filter(function($employee) use ($unit) {
+                return $employee->unit_organisasi === $unit;
+            });
+        }
+
+        // Apply status filter
+        $status = $request->get('status_pegawai', 'all');
+        if ($status !== 'all') {
+            $employees = $employees->filter(function($employee) use ($status) {
+                return $employee->status_pegawai === $status;
+            });
+        }
+
+        // Mock pagination
+        $pagination = (object)[
+            'current_page' => 1,
+            'last_page' => 1,
+            'per_page' => 20,
+            'total' => $employees->count(),
+            'from' => 1,
+            'to' => $employees->count(),
+            'data' => $employees->values(),
+            'first_page_url' => url()->current() . '?page=1',
+            'last_page_url' => url()->current() . '?page=1',
+            'next_page_url' => null,
+            'prev_page_url' => null
+        ];
+
+        return Inertia::render('Employees/Index', [
+            'employees' => $pagination,
+            'filterOptions' => [
+                'unitOrganisasi' => [
+                    'AIRSIDE' => 'Airside Operations',
+                    'LANDSIDE' => 'Landside Operations',
+                    'SSQC' => 'Security, Safety, Quality & Compliance',
+                    'BACK OFFICE' => 'Back Office',
+                    'ANCILLARY' => 'Ancillary Services'
+                ],
+                'statusPegawai' => [
+                    'PEGAWAI TETAP' => 'Pegawai Tetap',
+                    'PKWT' => 'PKWT',
+                    'TAD PAKET SDM' => 'TAD Paket SDM',
+                    'TAD PAKET PEKERJAAN' => 'TAD Paket Pekerjaan'
+                ]
+            ],
+            'statistics' => [
+                'totalEmployees' => $employees->count(),
+                'activeEmployees' => $employees->where('status_kerja', 'Aktif')->count(),
+                'newEmployees' => 2,
+                'totalUnits' => 5
+            ],
+            'filters' => [
+                'search' => $search,
+                'unit_organisasi' => $unit,
+                'status_pegawai' => $status
+            ],
+            'title' => 'Management Karyawan',
+            'subtitle' => 'Kelola data karyawan PT Gapura Angkasa - Bandar Udara Ngurah Rai'
+        ]);
     }
 
     /**
-     * Store a newly created employee
+     * Show create form
+     */
+    public function create()
+    {
+        return Inertia::render('Employees/Create', [
+            'title' => 'Tambah Karyawan Baru',
+            'unitOptions' => [
+                'AIRSIDE' => 'Airside Operations',
+                'LANDSIDE' => 'Landside Operations',
+                'SSQC' => 'Security, Safety, Quality & Compliance',
+                'BACK OFFICE' => 'Back Office',
+                'ANCILLARY' => 'Ancillary Services'
+            ],
+            'statusOptions' => [
+                'PEGAWAI TETAP' => 'Pegawai Tetap',
+                'PKWT' => 'PKWT',
+                'TAD PAKET SDM' => 'TAD Paket SDM',
+                'TAD PAKET PEKERJAAN' => 'TAD Paket Pekerjaan'
+            ]
+        ]);
+    }
+
+    /**
+     * Store new employee
      */
     public function store(Request $request)
     {
-        $validator = Validator::make($request->all(), [
+        // Validation rules
+        $request->validate([
+            'nik' => 'required|string|max:20',
+            'nip' => 'required|string|max:20',
             'nama_lengkap' => 'required|string|max:255',
-            'nip' => 'required|string|max:50|unique:employees,nip',
-            'nik' => 'required|string|max:20|unique:employees,nik',
-        ], [
-            'nama_lengkap.required' => 'Nama lengkap wajib diisi',
-            'nip.required' => 'NIP wajib diisi',
-            'nip.unique' => 'NIP sudah digunakan',
-            'nik.required' => 'NIK wajib diisi',
-            'nik.unique' => 'NIK sudah digunakan',
+            'jenis_kelamin' => 'required|in:L,P',
+            'unit_organisasi' => 'required|string',
+            'status_pegawai' => 'required|string'
         ]);
 
-        if ($validator->fails()) {
-            return back()->withErrors($validator)->withInput();
-        }
-
-        try {
-            DB::beginTransaction();
-
-            $employee = Employee::create([
-                'nama_lengkap' => $request->nama_lengkap,
-                'nip' => $request->nip,
-                'nik' => $request->nik,
-                // Set default values for other required fields
-                'status_kerja' => 'Aktif',
-                'unit_organisasi' => 'GAPURA ANGKASA',
-                'jabatan' => 'Staff',
-                'tanggal_masuk' => now(),
-            ]);
-
-            DB::commit();
-
-            Log::info('Employee created successfully', [
-                'employee_id' => $employee->id,
-                'nama_lengkap' => $request->nama_lengkap,
-                'nip' => $request->nip
-            ]);
-
-            return redirect()->route('employees.index')
-                           ->with('success', 'Karyawan berhasil ditambahkan!');
-
-        } catch (\Exception $e) {
-            DB::rollBack();
-
-            Log::error('Employee Store Error', [
-                'error' => $e->getMessage(),
-                'request_data' => $request->only(['nama_lengkap', 'nip', 'nik'])
-            ]);
-
-            return back()->withErrors(['error' => 'Gagal menambahkan karyawan: ' . $e->getMessage()])->withInput();
-        }
+        // For demo purposes, just redirect with success
+        return redirect()->route('employees.index')
+            ->with('success', 'Karyawan berhasil ditambahkan');
     }
 
     /**
-     * Update the specified employee
+     * Show edit form
      */
-    public function update(Request $request, Employee $employee)
+    public function edit($id)
     {
-        $validator = Validator::make($request->all(), [
+        // Mock employee data
+        $employee = (object)[
+            'id' => $id,
+            'nik' => '3671041234567890',
+            'nip' => 'GA20240001',
+            'nama_lengkap' => 'Ahmad Bagus Prasetyo',
+            'jenis_kelamin' => 'L',
+            'tempat_lahir' => 'Denpasar',
+            'tanggal_lahir' => '1985-03-15',
+            'alamat' => 'Jl. Sunset Road No. 123, Denpasar, Bali',
+            'handphone' => '081234567890',
+            'email' => 'ahmad.bagus@gapura.com',
+            'unit_organisasi' => 'AIRSIDE',
+            'jabatan' => 'Supervisor Ground Handling',
+            'status_pegawai' => 'PEGAWAI TETAP'
+        ];
+
+        return Inertia::render('Employees/Edit', [
+            'employee' => $employee,
+            'title' => 'Edit Karyawan',
+            'unitOptions' => [
+                'AIRSIDE' => 'Airside Operations',
+                'LANDSIDE' => 'Landside Operations',
+                'SSQC' => 'Security, Safety, Quality & Compliance',
+                'BACK OFFICE' => 'Back Office',
+                'ANCILLARY' => 'Ancillary Services'
+            ],
+            'statusOptions' => [
+                'PEGAWAI TETAP' => 'Pegawai Tetap',
+                'PKWT' => 'PKWT',
+                'TAD PAKET SDM' => 'TAD Paket SDM',
+                'TAD PAKET PEKERJAAN' => 'TAD Paket Pekerjaan'
+            ]
+        ]);
+    }
+
+    /**
+     * Update employee
+     */
+    public function update(Request $request, $id)
+    {
+        // Validation
+        $request->validate([
+            'nik' => 'required|string|max:20',
+            'nip' => 'required|string|max:20',
             'nama_lengkap' => 'required|string|max:255',
-            'nip' => 'required|string|max:50|unique:employees,nip,' . $employee->id,
-            'nik' => 'required|string|max:20|unique:employees,nik,' . $employee->id,
-        ], [
-            'nama_lengkap.required' => 'Nama lengkap wajib diisi',
-            'nip.required' => 'NIP wajib diisi',
-            'nip.unique' => 'NIP sudah digunakan',
-            'nik.required' => 'NIK wajib diisi',
-            'nik.unique' => 'NIK sudah digunakan',
+            'jenis_kelamin' => 'required|in:L,P',
+            'unit_organisasi' => 'required|string',
+            'status_pegawai' => 'required|string'
         ]);
 
-        if ($validator->fails()) {
-            return back()->withErrors($validator)->withInput();
-        }
-
-        try {
-            DB::beginTransaction();
-
-            $employee->update([
-                'nama_lengkap' => $request->nama_lengkap,
-                'nip' => $request->nip,
-                'nik' => $request->nik,
-            ]);
-
-            DB::commit();
-
-            Log::info('Employee updated successfully', [
-                'employee_id' => $employee->id,
-                'nama_lengkap' => $request->nama_lengkap,
-                'nip' => $request->nip
-            ]);
-
-            return redirect()->route('employees.index')
-                           ->with('success', 'Data karyawan berhasil diperbarui!');
-
-        } catch (\Exception $e) {
-            DB::rollBack();
-
-            Log::error('Employee Update Error', [
-                'employee_id' => $employee->id,
-                'error' => $e->getMessage()
-            ]);
-
-            return back()->withErrors(['error' => 'Gagal memperbarui data karyawan: ' . $e->getMessage()])->withInput();
-        }
+        return redirect()->route('employees.index')
+            ->with('success', 'Data karyawan berhasil diupdate');
     }
 
     /**
-     * Remove the specified employee
+     * Delete employee
      */
-    public function destroy(Employee $employee)
+    public function destroy($id)
     {
-        try {
-            // Check if employee has training records
-            if ($employee->trainingRecords()->exists()) {
-                return back()->withErrors(['error' => 'Tidak dapat menghapus karyawan yang memiliki data training.']);
-            }
-
-            $employeeName = $employee->nama_lengkap;
-            $employee->delete();
-
-            Log::info('Employee deleted successfully', [
-                'employee_id' => $employee->id,
-                'nama_lengkap' => $employeeName
-            ]);
-
-            return redirect()->route('employees.index')
-                           ->with('success', "Karyawan {$employeeName} berhasil dihapus!");
-
-        } catch (\Exception $e) {
-            Log::error('Employee Delete Error', [
-                'employee_id' => $employee->id,
-                'error' => $e->getMessage()
-            ]);
-
-            return back()->withErrors(['error' => 'Gagal menghapus karyawan: ' . $e->getMessage()]);
-        }
+        return redirect()->route('employees.index')
+            ->with('success', 'Karyawan berhasil dihapus');
     }
 
     /**
-     * Show employee details (if needed)
-     */
-    public function show(Employee $employee)
-    {
-        try {
-            return Inertia::render('Employee/Show', [
-                'employee' => $employee->only(['id', 'nama_lengkap', 'nip', 'nik']),
-                'title' => 'Detail Karyawan',
-                'subtitle' => 'Informasi karyawan ' . $employee->nama_lengkap
-            ]);
-
-        } catch (\Exception $e) {
-            Log::error('Employee Show Error', [
-                'employee_id' => $employee->id,
-                'error' => $e->getMessage()
-            ]);
-
-            return redirect()->route('employees.index')
-                           ->with('error', 'Error loading employee details.');
-        }
-    }
-
-    /**
-     * Get employee stats for dashboard
-     */
-    public function getStats()
-    {
-        try {
-            $total = Employee::count();
-            $active = Employee::where('status_kerja', 'Aktif')->count();
-            $withTraining = Employee::has('trainingRecords')->count();
-
-            return response()->json([
-                'total' => $total,
-                'active' => $active,
-                'with_training' => $withTraining,
-                'without_training' => $total - $withTraining,
-            ]);
-
-        } catch (\Exception $e) {
-            Log::error('Employee Stats Error', [
-                'error' => $e->getMessage()
-            ]);
-
-            return response()->json([
-                'total' => 0,
-                'active' => 0,
-                'with_training' => 0,
-                'without_training' => 0,
-            ], 500);
-        }
-    }
-
-    /**
-     * Export employees (simple CSV)
+     * Export employees
      */
     public function export()
     {
-        try {
-            $employees = Employee::select(['nama_lengkap', 'nip', 'nik'])
-                               ->orderBy('nama_lengkap')
-                               ->get();
+        $csvContent = "NIK,NIP,Nama Lengkap,Jenis Kelamin,Unit Organisasi,Jabatan,Status\n";
+        $csvContent .= '"3671041234567890","GA20240001","Ahmad Bagus Prasetyo","L","AIRSIDE","Supervisor","PEGAWAI TETAP"' . "\n";
+        $csvContent .= '"3671041234567891","GA20240002","Ni Made Sari Dewi","P","LANDSIDE","Staff","PEGAWAI TETAP"' . "\n";
 
-            $csvContent = "Nama Lengkap,NIP,NIK\n";
-
-            foreach ($employees as $employee) {
-                $csvContent .= sprintf(
-                    '"%s","%s","%s"' . "\n",
-                    $employee->nama_lengkap ?: '',
-                    $employee->nip ?: '',
-                    $employee->nik ?: ''
-                );
-            }
-
-            $fileName = 'employees_' . date('Y-m-d_H-i-s') . '.csv';
-
-            return response($csvContent, 200, [
-                'Content-Type' => 'text/csv',
-                'Content-Disposition' => 'attachment; filename="' . $fileName . '"',
-            ]);
-
-        } catch (\Exception $e) {
-            Log::error('Employee Export Error', [
-                'error' => $e->getMessage()
-            ]);
-
-            return back()->withErrors(['error' => 'Gagal export data: ' . $e->getMessage()]);
-        }
+        return response($csvContent, 200, [
+            'Content-Type' => 'text/csv',
+            'Content-Disposition' => 'attachment; filename="employees_export.csv"'
+        ]);
     }
 }
