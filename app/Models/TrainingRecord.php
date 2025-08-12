@@ -1,42 +1,66 @@
 <?php
 
+// app/Models/TrainingRecord.php
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Carbon\Carbon;
 
 class TrainingRecord extends Model
 {
-    use HasFactory;
+    use HasFactory, SoftDeletes;
 
     protected $fillable = [
-        'employee_nip',
+        'employee_id',
         'training_type_id',
         'certificate_number',
-        'issued_date',
-        'valid_from',
-        'valid_until',
-        'status',
-        'notes',
-        'issuing_authority',
+        'training_provider',
+        'issue_date',
+        'expiry_date',
+        'validity_period',
         'training_location',
-        'instructor',
-        'import_batch_id',
-        'imported_at',
+        'training_duration',
+        'instructor_name',
+        'completion_status',
+        'training_cost',
+        'internal_external',
+        'batch_id',
+        'notes',
+        'compliance_requirements',
+        'renewal_required',
+        'notification_before_expiry',
+        'certificate_file',
+        'supporting_documents',
+        'created_by',
+        'updated_by',
     ];
 
     protected $casts = [
-        'issued_date' => 'date',
-        'valid_from' => 'date',
-        'valid_until' => 'date',
-        'imported_at' => 'datetime',
+        'issue_date' => 'date',
+        'expiry_date' => 'date',
+        'training_cost' => 'decimal:2',
+        'renewal_required' => 'boolean',
+        'notification_before_expiry' => 'integer',
+        'supporting_documents' => 'array',
+        'created_at' => 'datetime',
+        'updated_at' => 'datetime',
+        'deleted_at' => 'datetime',
+    ];
+
+    protected $dates = [
+        'issue_date',
+        'expiry_date',
+        'created_at',
+        'updated_at',
+        'deleted_at',
     ];
 
     // Relationships
     public function employee()
     {
-        return $this->belongsTo(Employee::class, 'employee_nip', 'nip');
+        return $this->belongsTo(Employee::class);
     }
 
     public function trainingType()
@@ -45,29 +69,20 @@ class TrainingRecord extends Model
     }
 
     // Scopes
-    public function scopeActive($query)
+    public function scopeValid($query)
     {
-        return $query->where('status', 'active');
+        return $query->where('expiry_date', '>', Carbon::today());
     }
 
     public function scopeExpired($query)
     {
-        return $query->where('valid_until', '<', now()->toDateString())
-                     ->orWhere('status', 'expired');
+        return $query->where('expiry_date', '<=', Carbon::today());
     }
 
-    public function scopeExpiringSoon($query, $days = 30)
+    public function scopeDueSoon($query, $days = 30)
     {
-        return $query->where('valid_until', '<=', now()->addDays($days)->toDateString())
-                     ->where('valid_until', '>=', now()->toDateString())
-                     ->where('status', '!=', 'expired');
-    }
-
-    public function scopeByDepartment($query, $department)
-    {
-        return $query->whereHas('employee', function ($q) use ($department) {
-            $q->where('unit_organisasi', $department);
-        });
+        $today = Carbon::today();
+        return $query->whereBetween('expiry_date', [$today, $today->copy()->addDays($days)]);
     }
 
     public function scopeByTrainingType($query, $trainingTypeId)
@@ -75,162 +90,137 @@ class TrainingRecord extends Model
         return $query->where('training_type_id', $trainingTypeId);
     }
 
-    public function scopeByDateRange($query, $startDate, $endDate)
+    public function scopeByEmployee($query, $employeeId)
     {
-        return $query->whereBetween('valid_from', [$startDate, $endDate]);
+        return $query->where('employee_id', $employeeId);
     }
 
-    public function scopeValidCertificates($query)
+    public function scopeCompleted($query)
     {
-        return $query->where('status', 'active')
-                     ->where('valid_until', '>=', now()->toDateString());
+        return $query->where('completion_status', 'completed');
     }
 
-    // Accessors
-    public function getIsExpiredAttribute()
+    public function scopeInternal($query)
     {
-        return $this->valid_until && $this->valid_until->isPast();
+        return $query->where('internal_external', 'internal');
     }
 
-    public function getIsExpiringSoonAttribute()
+    public function scopeExternal($query)
     {
-        if (!$this->valid_until) return false;
-        return $this->valid_until->diffInDays(now()) <= 30 && !$this->is_expired;
+        return $query->where('internal_external', 'external');
     }
 
-    public function getDaysUntilExpiryAttribute()
+    // Accessors & Mutators
+    public function getStatusAttribute()
     {
-        if (!$this->valid_until) return null;
-        $diff = $this->valid_until->diffInDays(now(), false);
-        return $diff < 0 ? 0 : $diff;
-    }
+        $today = Carbon::today();
+        $expiryDate = Carbon::parse($this->expiry_date);
+        $daysUntilExpiry = $today->diffInDays($expiryDate, false);
 
-    public function getStatusBadgeColorAttribute()
-    {
-        if ($this->is_expired) return 'red';
-        if ($this->is_expiring_soon) return 'yellow';
-
-        return match($this->status) {
-            'active' => 'green',
-            'expired' => 'red',
-            'expiring_soon' => 'yellow',
-            'suspended' => 'gray',
-            default => 'gray',
-        };
+        if ($daysUntilExpiry < 0) {
+            return 'expired';
+        } elseif ($daysUntilExpiry <= 30) {
+            return 'due_soon';
+        } else {
+            return 'valid';
+        }
     }
 
     public function getStatusTextAttribute()
     {
-        if ($this->is_expired) return 'Expired';
-        if ($this->is_expiring_soon) return 'Expiring Soon';
-
-        return match($this->status) {
-            'active' => 'Active',
-            'expired' => 'Expired',
-            'expiring_soon' => 'Expiring Soon',
-            'suspended' => 'Suspended',
-            default => ucfirst($this->status),
-        };
+        switch ($this->status) {
+            case 'expired':
+                return 'Expired';
+            case 'due_soon':
+                return 'Due Soon';
+            case 'valid':
+                return 'Valid';
+            default:
+                return 'Unknown';
+        }
     }
 
-    public function getValidityPeriodAttribute()
+    public function getDaysUntilExpiryAttribute()
     {
-        if (!$this->valid_from || !$this->valid_until) return null;
-
-        return $this->valid_from->format('d M Y') . ' - ' . $this->valid_until->format('d M Y');
+        $today = Carbon::today();
+        $expiryDate = Carbon::parse($this->expiry_date);
+        return $today->diffInDays($expiryDate, false);
     }
 
-    public function getEmployeeNameAttribute()
+    public function getIsExpiredAttribute()
     {
-        return $this->employee ? $this->employee->nama_lengkap : 'Unknown';
+        return Carbon::parse($this->expiry_date)->isPast();
     }
 
-    public function getTrainingTypeNameAttribute()
+    public function getIsDueSoonAttribute()
     {
-        return $this->trainingType ? $this->trainingType->name : 'Unknown';
+        $daysUntilExpiry = $this->days_until_expiry;
+        return $daysUntilExpiry >= 0 && $daysUntilExpiry <= ($this->notification_before_expiry ?? 30);
     }
 
-    // Auto-update status based on dates
-    protected static function booted()
+    public function getCertificateFileUrlAttribute()
     {
-        static::saving(function ($trainingRecord) {
-            if ($trainingRecord->valid_until) {
-                $now = now()->toDateString();
-                $expiryWarningDate = now()->addDays(30)->toDateString();
+        return $this->certificate_file ? asset('storage/' . $this->certificate_file) : null;
+    }
 
-                if ($trainingRecord->valid_until < $now) {
-                    $trainingRecord->status = 'expired';
-                } elseif ($trainingRecord->valid_until <= $expiryWarningDate) {
-                    $trainingRecord->status = 'expiring_soon';
-                } else {
-                    $trainingRecord->status = 'active';
-                }
-            }
-        });
+    public function getSupportingDocumentsUrlsAttribute()
+    {
+        if (!$this->supporting_documents) {
+            return [];
+        }
 
-        // Update all records periodically (can be called via scheduled job)
-        static::updated(function ($trainingRecord) {
-            // Log status changes if needed
-        });
+        return collect($this->supporting_documents)->map(function ($doc) {
+            return [
+                'filename' => $doc['filename'],
+                'url' => asset('storage/' . $doc['path']),
+                'path' => $doc['path'],
+            ];
+        })->toArray();
     }
 
     // Helper methods
-    public function renewCertificate($newValidUntil, $newCertificateNumber = null)
+    public function shouldSendExpiryNotification()
     {
-        $this->update([
-            'valid_until' => $newValidUntil,
-            'certificate_number' => $newCertificateNumber ?? $this->certificate_number,
-            'status' => 'active',
-        ]);
-    }
-
-    public function suspend($reason = null)
-    {
-        $this->update([
-            'status' => 'suspended',
-            'notes' => $reason ? ($this->notes . "\nSuspended: " . $reason) : $this->notes,
-        ]);
-    }
-
-    public function reactivate()
-    {
-        // Auto-determine status based on expiry date
-        $this->save(); // This will trigger the booted() method to set correct status
-    }
-
-    // Static helper methods
-    public static function getComplianceStats($departmentFilter = null)
-    {
-        $query = self::query();
-
-        if ($departmentFilter) {
-            $query->byDepartment($departmentFilter);
+        if (!$this->renewal_required) {
+            return false;
         }
 
-        return [
-            'total' => $query->count(),
-            'active' => $query->clone()->active()->count(),
-            'expired' => $query->clone()->expired()->count(),
-            'expiring_soon' => $query->clone()->expiringSoon()->count(),
-            'compliance_rate' => $query->count() > 0
-                ? round(($query->clone()->active()->count() / $query->count()) * 100, 2)
-                : 0
-        ];
+        $daysUntilExpiry = $this->days_until_expiry;
+        $notificationDays = $this->notification_before_expiry ?? 30;
+
+        return $daysUntilExpiry >= 0 && $daysUntilExpiry <= $notificationDays;
     }
 
-    public static function getExpiringCertificates($days = 30)
+    public function canBeRenewed()
     {
-        return self::with(['employee', 'trainingType'])
-                   ->expiringSoon($days)
-                   ->orderBy('valid_until')
-                   ->get();
+        return $this->renewal_required && $this->completion_status === 'completed';
     }
 
-    public static function getExpiredCertificates()
+    public function calculateExpiryDate($issueDate = null, $validityPeriod = null)
     {
-        return self::with(['employee', 'trainingType'])
-                   ->expired()
-                   ->orderBy('valid_until', 'desc')
-                   ->get();
+        $issue = $issueDate ? Carbon::parse($issueDate) : Carbon::parse($this->issue_date);
+        $validity = $validityPeriod ?? $this->validity_period ?? $this->trainingType->validity_period ?? 24;
+
+        return $issue->addMonths($validity);
+    }
+
+    // Boot method for model events
+    protected static function boot()
+    {
+        parent::boot();
+
+        static::creating(function ($model) {
+            // Auto-calculate expiry date if not provided
+            if (!$model->expiry_date && $model->issue_date && $model->validity_period) {
+                $model->expiry_date = $model->calculateExpiryDate($model->issue_date, $model->validity_period);
+            }
+        });
+
+        static::updating(function ($model) {
+            // Recalculate expiry date if issue date or validity period changed
+            if ($model->isDirty(['issue_date', 'validity_period']) && $model->issue_date && $model->validity_period) {
+                $model->expiry_date = $model->calculateExpiryDate($model->issue_date, $model->validity_period);
+            }
+        });
     }
 }

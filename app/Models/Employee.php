@@ -59,391 +59,229 @@ class Employee extends Model
         'tmt_mulai_kerja' => 'date',
         'tmt_mulai_jabatan' => 'date',
         'tmt_berakhir_jabatan' => 'date',
-        'tahun_lulus' => 'integer',
         'usia' => 'integer',
         'masa_kerja_tahun' => 'integer',
         'masa_kerja_bulan' => 'integer',
         'masa_kerja_hari' => 'integer',
-        'tinggi_badan' => 'integer',
-        'berat_badan' => 'integer',
+        'tahun_lulus' => 'integer',
         'ukuran_sepatu_pantofel' => 'integer',
         'ukuran_sepatu_safety' => 'integer',
+        'tinggi_badan' => 'integer',
+        'berat_badan' => 'integer',
+        'created_at' => 'datetime',
+        'updated_at' => 'datetime',
     ];
 
-    // Use NIP as primary key for training relationships
-    protected $primaryKey = 'id';
-    public $incrementing = true;
+    // =========================================================================
+    // TRAINING RELATIONSHIPS & METHODS
+    // =========================================================================
 
-    // ===============================================
-    // TRAINING SYSTEM RELATIONSHIPS
-    // ===============================================
-
+    /**
+     * Training records relationship
+     */
     public function trainingRecords()
     {
-        return $this->hasMany(TrainingRecord::class, 'employee_nip', 'nip');
+        return $this->hasMany(TrainingRecord::class);
     }
 
+    /**
+     * Training types relationship (many-to-many through training_records)
+     */
+    public function trainingTypes()
+    {
+        return $this->belongsToMany(TrainingType::class, 'training_records')
+                    ->withPivot('certificate_number', 'issue_date', 'expiry_date', 'completion_status')
+                    ->withTimestamps();
+    }
+
+    /**
+     * Background checks relationship
+     */
     public function backgroundChecks()
     {
         return $this->hasMany(BackgroundCheck::class, 'employee_nip', 'nip');
     }
 
-    public function activeTrainingRecords()
+    // =========================================================================
+    // TRAINING-RELATED ACCESSORS
+    // =========================================================================
+
+    /**
+     * Get count of valid (non-expired) training records
+     */
+    public function getValidTrainingsCountAttribute()
     {
-        return $this->trainingRecords()->where('status', 'active');
+        return $this->trainingRecords()
+                    ->where('expiry_date', '>', Carbon::today())
+                    ->where('completion_status', 'completed')
+                    ->count();
     }
 
-    public function expiredTrainingRecords()
+    /**
+     * Get count of expired training records
+     */
+    public function getExpiredTrainingsCountAttribute()
     {
-        return $this->trainingRecords()->expired();
+        return $this->trainingRecords()
+                    ->where('expiry_date', '<=', Carbon::today())
+                    ->count();
     }
 
-    public function expiringSoonTrainingRecords($days = 30)
+    /**
+     * Get count of trainings due soon (within 30 days)
+     */
+    public function getDueSoonTrainingsCountAttribute()
     {
-        return $this->trainingRecords()->expiringSoon($days);
+        $today = Carbon::today();
+        return $this->trainingRecords()
+                    ->whereBetween('expiry_date', [$today, $today->copy()->addDays(30)])
+                    ->where('completion_status', 'completed')
+                    ->count();
     }
 
-    public function latestBackgroundCheck()
+    /**
+     * Get total training records count
+     */
+    public function getTotalTrainingsAttribute()
     {
-        return $this->hasOne(BackgroundCheck::class, 'employee_nip', 'nip')
-                    ->latest('check_date');
+        return $this->trainingRecords()->count();
     }
 
-    public function validBackgroundChecks()
+    /**
+     * Calculate training compliance rate
+     */
+    public function getTrainingComplianceRateAttribute()
     {
-        return $this->backgroundChecks()->passed()->where(function($query) {
-            $query->whereNull('valid_until')
-                  ->orWhere('valid_until', '>=', now()->toDateString());
+        $total = $this->total_trainings;
+        $valid = $this->valid_trainings_count;
+
+        return $total > 0 ? round(($valid / $total) * 100, 2) : 0;
+    }
+
+    // =========================================================================
+    // TRAINING HELPER METHODS
+    // =========================================================================
+
+    /**
+     * Check if employee has valid training for specific type
+     */
+    public function hasValidTraining($trainingTypeId)
+    {
+        return $this->trainingRecords()
+                    ->where('training_type_id', $trainingTypeId)
+                    ->where('expiry_date', '>', Carbon::today())
+                    ->where('completion_status', 'completed')
+                    ->exists();
+    }
+
+    /**
+     * Get latest training record for specific type
+     */
+    public function getLatestTraining($trainingTypeId)
+    {
+        return $this->trainingRecords()
+                    ->where('training_type_id', $trainingTypeId)
+                    ->latest('issue_date')
+                    ->first();
+    }
+
+    /**
+     * Get trainings expiring within specified days
+     */
+    public function getExpiringTrainings($days = 30)
+    {
+        $today = Carbon::today();
+        return $this->trainingRecords()
+                    ->whereBetween('expiry_date', [$today, $today->copy()->addDays($days)])
+                    ->where('completion_status', 'completed')
+                    ->with('trainingType')
+                    ->get();
+    }
+
+    /**
+     * Get missing mandatory trainings for this employee
+     */
+    public function getMissingMandatoryTrainings()
+    {
+        $mandatoryTrainingTypes = TrainingType::where('is_mandatory', true)
+                                            ->where('is_active', true)
+                                            ->get();
+
+        $employeeTrainingTypes = $this->trainingRecords()
+                                    ->where('expiry_date', '>', Carbon::today())
+                                    ->where('completion_status', 'completed')
+                                    ->pluck('training_type_id');
+
+        return $mandatoryTrainingTypes->whereNotIn('id', $employeeTrainingTypes);
+    }
+
+    /**
+     * Get training summary for dashboard
+     */
+    public function getTrainingSummary()
+    {
+        return [
+            'total' => $this->total_trainings,
+            'valid' => $this->valid_trainings_count,
+            'expired' => $this->expired_trainings_count,
+            'due_soon' => $this->due_soon_trainings_count,
+            'compliance_rate' => $this->training_compliance_rate,
+            'missing_mandatory' => $this->getMissingMandatoryTrainings()->count(),
+        ];
+    }
+
+    // =========================================================================
+    // SCOPES FOR TRAINING QUERIES
+    // =========================================================================
+
+    /**
+     * Scope: Employees with training records
+     */
+    public function scopeWithTrainings($query)
+    {
+        return $query->has('trainingRecords');
+    }
+
+    /**
+     * Scope: Employees with valid trainings
+     */
+    public function scopeWithValidTrainings($query)
+    {
+        return $query->whereHas('trainingRecords', function($q) {
+            $q->where('expiry_date', '>', Carbon::today())
+              ->where('completion_status', 'completed');
         });
     }
 
-    // ===============================================
-    // SCOPES
-    // ===============================================
-
-    public function scopeActive($query)
+    /**
+     * Scope: Employees with expired trainings
+     */
+    public function scopeWithExpiredTrainings($query)
     {
-        return $query->where('status_kerja', 'Aktif');
+        return $query->whereHas('trainingRecords', function($q) {
+            $q->where('expiry_date', '<=', Carbon::today());
+        });
     }
 
+    /**
+     * Scope: Employees by department
+     */
     public function scopeByDepartment($query, $department)
     {
         return $query->where('unit_organisasi', $department);
     }
 
-    public function scopeByStatus($query, $status)
+    /**
+     * Scope: Active employees only
+     */
+    public function scopeActive($query)
     {
-        return $query->where('status_pegawai', $status);
+        return $query->where('status_kerja', 'Aktif');
     }
 
-    public function scopeByJobTitle($query, $jobTitle)
-    {
-        return $query->where('jabatan', $jobTitle);
-    }
+    // =========================================================================
+    // EXISTING EMPLOYEE METHODS (if any)
+    // =========================================================================
 
-    public function scopeWithTrainingCompliance($query)
-    {
-        return $query->with([
-            'trainingRecords.trainingType',
-            'latestBackgroundCheck'
-        ]);
-    }
-
-    public function scopeNeedsTraining($query)
-    {
-        return $query->whereDoesntHave('trainingRecords')
-                     ->orWhereHas('trainingRecords', function($q) {
-                         $q->where('status', '!=', 'active');
-                     });
-    }
-
-    public function scopeTrainingExpiringSoon($query, $days = 30)
-    {
-        return $query->whereHas('trainingRecords', function($q) use ($days) {
-            $q->expiringSoon($days);
-        });
-    }
-
-    public function scopeCompliantEmployees($query)
-    {
-        $totalTrainingTypes = \App\Models\TrainingType::active()->count();
-
-        return $query->whereHas('trainingRecords', function($q) use ($totalTrainingTypes) {
-            $q->where('status', 'active');
-        }, '>=', $totalTrainingTypes);
-    }
-
-    public function scopeWithValidBackgroundCheck($query)
-    {
-        return $query->whereHas('backgroundChecks', function($q) {
-            $q->where('status', 'passed')
-              ->where(function($subQ) {
-                  $subQ->whereNull('valid_until')
-                       ->orWhere('valid_until', '>=', now()->toDateString());
-              });
-        });
-    }
-
-    // ===============================================
-    // ACCESSORS & MUTATORS
-    // ===============================================
-
-    public function getFullNameAttribute()
-    {
-        return $this->nama_lengkap;
-    }
-
-    public function getAgeCalculatedAttribute()
-    {
-        return $this->tanggal_lahir ? $this->tanggal_lahir->age : null;
-    }
-
-    public function getYearsOfServiceAttribute()
-    {
-        return $this->tmt_mulai_kerja ? $this->tmt_mulai_kerja->diffInYears(now()) : 0;
-    }
-
-    public function getTrainingComplianceStatusAttribute()
-    {
-        $totalTrainingTypes = \App\Models\TrainingType::active()->count();
-        $activeTrainingCount = $this->activeTrainingRecords()->count();
-
-        if ($activeTrainingCount === 0) return 'no_training';
-        if ($activeTrainingCount < $totalTrainingTypes) return 'partial_compliance';
-
-        // Check if any training is expiring soon
-        if ($this->expiringSoonTrainingRecords()->exists()) return 'expiring_soon';
-
-        return 'compliant';
-    }
-
-    public function getTrainingCompliancePercentageAttribute()
-    {
-        $totalTrainingTypes = \App\Models\TrainingType::active()->count();
-        if ($totalTrainingTypes === 0) return 100;
-
-        $activeTrainingCount = $this->activeTrainingRecords()->count();
-        return round(($activeTrainingCount / $totalTrainingTypes) * 100);
-    }
-
-    public function getBackgroundCheckStatusAttribute()
-    {
-        $latestCheck = $this->latestBackgroundCheck;
-
-        if (!$latestCheck) return 'no_check';
-        if ($latestCheck->status !== 'passed') return 'failed';
-        if ($latestCheck->valid_until && $latestCheck->valid_until->isPast()) return 'expired';
-        if ($latestCheck->valid_until && $latestCheck->valid_until->diffInDays(now()) <= 60) return 'expiring_soon';
-
-        return 'valid';
-    }
-
-    public function getTrainingComplianceColorAttribute()
-    {
-        return match($this->training_compliance_status) {
-            'compliant' => 'green',
-            'expiring_soon' => 'yellow',
-            'partial_compliance' => 'orange',
-            'no_training' => 'red',
-            default => 'gray',
-        };
-    }
-
-    public function getBackgroundCheckColorAttribute()
-    {
-        return match($this->background_check_status) {
-            'valid' => 'green',
-            'expiring_soon' => 'yellow',
-            'expired' => 'red',
-            'failed' => 'red',
-            'no_check' => 'gray',
-            default => 'gray',
-        };
-    }
-
-    public function getInitialsAttribute()
-    {
-        $words = explode(' ', $this->nama_lengkap);
-        $initials = '';
-        foreach ($words as $word) {
-            $initials .= strtoupper(substr($word, 0, 1));
-        }
-        return substr($initials, 0, 2); // Max 2 characters
-    }
-
-    // Auto-calculate age on save
-    protected static function booted()
-    {
-        static::saving(function ($employee) {
-            if ($employee->tanggal_lahir) {
-                $employee->usia = Carbon::parse($employee->tanggal_lahir)->age;
-            }
-
-            // Calculate work experience
-            if ($employee->tmt_mulai_kerja) {
-                $workStart = Carbon::parse($employee->tmt_mulai_kerja);
-                $now = now();
-
-                $employee->masa_kerja_tahun = $workStart->diffInYears($now);
-                $employee->masa_kerja_bulan = $workStart->diffInMonths($now) % 12;
-                $employee->masa_kerja_hari = $workStart->copy()->addYears($employee->masa_kerja_tahun)->addMonths($employee->masa_kerja_bulan)->diffInDays($now);
-            }
-        });
-    }
-
-    // ===============================================
-    // TRAINING HELPER METHODS
-    // ===============================================
-
-    public function hasValidTraining($trainingTypeCode = null)
-    {
-        $query = $this->activeTrainingRecords();
-
-        if ($trainingTypeCode) {
-            $query->whereHas('trainingType', function($q) use ($trainingTypeCode) {
-                $q->where('code', $trainingTypeCode);
-            });
-        }
-
-        return $query->exists();
-    }
-
-    public function getTrainingRecord($trainingTypeCode)
-    {
-        return $this->trainingRecords()
-                    ->whereHas('trainingType', function($q) use ($trainingTypeCode) {
-                        $q->where('code', $trainingTypeCode);
-                    })
-                    ->latest('valid_until')
-                    ->first();
-    }
-
-    public function getMissingTrainingTypes()
-    {
-        $allTrainingTypes = \App\Models\TrainingType::active()->get();
-        $employeeTrainingTypes = $this->activeTrainingRecords()
-                                      ->with('trainingType')
-                                      ->get()
-                                      ->pluck('trainingType.id');
-
-        return $allTrainingTypes->whereNotIn('id', $employeeTrainingTypes);
-    }
-
-    public function getTrainingMatrix()
-    {
-        $trainingTypes = \App\Models\TrainingType::active()->ordered()->get();
-        $matrix = [];
-
-        foreach ($trainingTypes as $type) {
-            $record = $this->getTrainingRecord($type->code);
-            $matrix[] = [
-                'training_type' => $type,
-                'record' => $record,
-                'status' => $record ? $record->status_text : 'Not Completed',
-                'color' => $record ? $record->status_badge_color : 'gray',
-                'expires_at' => $record ? $record->valid_until : null,
-                'days_until_expiry' => $record ? $record->days_until_expiry : null,
-            ];
-        }
-
-        return $matrix;
-    }
-
-    public function canPerformDuty($requiredTrainingCodes = [])
-    {
-        // Check background check
-        if ($this->background_check_status !== 'valid') {
-            return false;
-        }
-
-        // Check required trainings
-        foreach ($requiredTrainingCodes as $code) {
-            if (!$this->hasValidTraining($code)) {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    public function getTrainingGaps()
-    {
-        $missingTrainings = $this->getMissingTrainingTypes();
-        $expiringTrainings = $this->expiringSoonTrainingRecords()->with('trainingType')->get();
-        $expiredTrainings = $this->expiredTrainingRecords()->with('trainingType')->get();
-
-        return [
-            'missing' => $missingTrainings,
-            'expiring' => $expiringTrainings,
-            'expired' => $expiredTrainings,
-            'total_gaps' => $missingTrainings->count() + $expiringTrainings->count() + $expiredTrainings->count(),
-        ];
-    }
-
-    public function addTrainingRecord($trainingTypeId, $certificateNumber, $validFrom, $validUntil, $additionalData = [])
-    {
-        return $this->trainingRecords()->create(array_merge([
-            'training_type_id' => $trainingTypeId,
-            'certificate_number' => $certificateNumber,
-            'valid_from' => $validFrom,
-            'valid_until' => $validUntil,
-            'status' => 'active',
-        ], $additionalData));
-    }
-
-    public function addBackgroundCheck($checkDate, $checkType = 'security_clearance', $status = 'passed', $validUntil = null, $additionalData = [])
-    {
-        return $this->backgroundChecks()->create(array_merge([
-            'check_date' => $checkDate,
-            'check_type' => $checkType,
-            'status' => $status,
-            'valid_until' => $validUntil,
-        ], $additionalData));
-    }
-
-    // ===============================================
-    // STATIC METHODS
-    // ===============================================
-
-    public static function getTrainingComplianceReport($departmentFilter = null)
-    {
-        $query = self::query();
-
-        if ($departmentFilter) {
-            $query->byDepartment($departmentFilter);
-        }
-
-        $employees = $query->withTrainingCompliance()->get();
-
-        $report = [
-            'total_employees' => $employees->count(),
-            'compliant' => $employees->where('training_compliance_status', 'compliant')->count(),
-            'partial_compliance' => $employees->where('training_compliance_status', 'partial_compliance')->count(),
-            'expiring_soon' => $employees->where('training_compliance_status', 'expiring_soon')->count(),
-            'no_training' => $employees->where('training_compliance_status', 'no_training')->count(),
-            'valid_background_checks' => $employees->where('background_check_status', 'valid')->count(),
-        ];
-
-        $report['compliance_percentage'] = $report['total_employees'] > 0
-            ? round(($report['compliant'] / $report['total_employees']) * 100, 2)
-            : 0;
-
-        return $report;
-    }
-
-    public static function getDepartmentStats()
-    {
-        return self::selectRaw('unit_organisasi, COUNT(*) as total')
-                   ->groupBy('unit_organisasi')
-                   ->orderBy('total', 'desc')
-                   ->get();
-    }
-
-    public static function getStatusDistribution()
-    {
-        return self::selectRaw('status_pegawai, COUNT(*) as total')
-                   ->groupBy('status_pegawai')
-                   ->orderBy('total', 'desc')
-                   ->get();
-    }
+    // Add any existing employee methods here...
 }

@@ -2,263 +2,612 @@
 
 namespace App\Http\Controllers;
 
-use Illuminate\Http\Request;
-use Inertia\Inertia;
-use App\Models\TrainingType;
 use App\Models\TrainingRecord;
+use App\Models\TrainingType;
 use App\Models\Employee;
-use Illuminate\Support\Facades\Redirect;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\ValidationException;
+use Inertia\Inertia;
+use Carbon\Carbon;
 
 class TrainingController extends Controller
 {
     /**
-     * Display training types management
+     * Display a listing of training records with filters and search
+     * Following the pattern from EmployeeController
      */
-    public function index()
+    public function index(Request $request)
     {
-        $trainingTypes = TrainingType::withCount([
-                'trainingRecords',
-                'trainingRecords as active_count' => function($query) {
-                    $query->where('status', 'active');
-                },
-                'trainingRecords as expired_count' => function($query) {
-                    $query->where('status', 'expired');
-                },
-                'trainingRecords as expiring_soon_count' => function($query) {
-                    $query->where('status', 'expiring_soon');
-                }
-            ])
-            ->ordered()
-            ->get();
+        try {
+            // Get filter parameters
+            $search = $request->get('search');
+            $trainingType = $request->get('training_type');
+            $status = $request->get('status');
+            $employee = $request->get('employee');
+            $expiry = $request->get('expiry');
+            $department = $request->get('department');
+            $perPage = $request->get('per_page', 20);
+            $sortField = $request->get('sort', 'expiry_date');
+            $sortDirection = $request->get('direction', 'asc');
 
-        return Inertia::render('Training/Index', [
-            'trainingTypes' => $trainingTypes,
-            'statistics' => $this->getTrainingStatistics(),
-        ]);
-    }
+            // Build query with relationships
+            $query = TrainingRecord::with([
+                'employee:id,nip,nama_lengkap,unit_organisasi,jabatan,email,handphone',
+                'trainingType:id,name,category,validity_period'
+            ]);
 
-    /**
-     * Show training type details
-     */
-    public function show(TrainingType $trainingType)
-    {
-        $trainingType->load([
-            'trainingRecords.employee',
-            'trainingRecords' => function($query) {
-                $query->latest('valid_until');
+            // Apply search filter
+            if ($search) {
+                $query->where(function ($q) use ($search) {
+                    $q->where('certificate_number', 'like', "%{$search}%")
+                      ->orWhere('training_provider', 'like', "%{$search}%")
+                      ->orWhere('notes', 'like', "%{$search}%")
+                      ->orWhereHas('employee', function ($eq) use ($search) {
+                          $eq->where('nama_lengkap', 'like', "%{$search}%")
+                             ->orWhere('nip', 'like', "%{$search}%");
+                      })
+                      ->orWhereHas('trainingType', function ($tq) use ($search) {
+                          $tq->where('name', 'like', "%{$search}%")
+                             ->orWhere('category', 'like', "%{$search}%");
+                      });
+                });
             }
-        ]);
 
-        $records = $trainingType->trainingRecords()->with('employee')
-                                                  ->latest('valid_until')
-                                                  ->paginate(20);
+            // Apply training type filter
+            if ($trainingType && $trainingType !== 'all') {
+                $query->where('training_type_id', $trainingType);
+            }
 
-        return Inertia::render('Training/Show', [
-            'trainingType' => $trainingType,
-            'records' => $records,
-            'statistics' => [
-                'total' => $trainingType->training_records_count ?? 0,
-                'active' => $trainingType->active_count ?? 0,
-                'expired' => $trainingType->expired_count ?? 0,
-                'expiring_soon' => $trainingType->expiring_soon_count ?? 0,
-            ],
-        ]);
+            // Apply status filter (based on expiry date)
+            if ($status && $status !== 'all') {
+                $today = Carbon::today();
+
+                switch ($status) {
+                    case 'valid':
+                        $query->where('expiry_date', '>', $today);
+                        break;
+                    case 'due_soon':
+                        $query->whereBetween('expiry_date', [$today, $today->copy()->addDays(30)]);
+                        break;
+                    case 'expired':
+                        $query->where('expiry_date', '<=', $today);
+                        break;
+                }
+            }
+
+            // Apply expiry period filter
+            if ($expiry && $expiry !== 'all') {
+                $today = Carbon::today();
+
+                switch ($expiry) {
+                    case 'this_month':
+                        $query->whereBetween('expiry_date', [$today, $today->copy()->endOfMonth()]);
+                        break;
+                    case 'next_30_days':
+                        $query->whereBetween('expiry_date', [$today, $today->copy()->addDays(30)]);
+                        break;
+                    case 'next_90_days':
+                        $query->whereBetween('expiry_date', [$today, $today->copy()->addDays(90)]);
+                        break;
+                    case 'expired':
+                        $query->where('expiry_date', '<', $today);
+                        break;
+                }
+            }
+
+            // Apply department filter
+            if ($department && $department !== 'all') {
+                $query->whereHas('employee', function ($eq) use ($department) {
+                    $eq->where('unit_organisasi', $department);
+                });
+            }
+
+            // Apply sorting
+            switch ($sortField) {
+                case 'employee_name':
+                    $query->join('employees', 'training_records.employee_id', '=', 'employees.id')
+                          ->orderBy('employees.nama_lengkap', $sortDirection)
+                          ->select('training_records.*');
+                    break;
+                case 'training_type':
+                    $query->join('training_types', 'training_records.training_type_id', '=', 'training_types.id')
+                          ->orderBy('training_types.name', $sortDirection)
+                          ->select('training_records.*');
+                    break;
+                default:
+                    $query->orderBy($sortField, $sortDirection);
+                    break;
+            }
+
+            // Get paginated results
+            $trainingRecords = $query->paginate($perPage);
+
+            // Calculate statistics
+            $statistics = $this->calculateTrainingStatistics();
+
+            // Get filter options
+            $filterOptions = $this->getFilterOptions();
+
+            return Inertia::render('Training/Index', [
+                'trainingRecords' => $trainingRecords,
+                'pagination' => [
+                    'current_page' => $trainingRecords->currentPage(),
+                    'last_page' => $trainingRecords->lastPage(),
+                    'per_page' => $trainingRecords->perPage(),
+                    'total' => $trainingRecords->total(),
+                    'from' => $trainingRecords->firstItem(),
+                    'to' => $trainingRecords->lastItem(),
+                    'first_page_url' => $trainingRecords->url(1),
+                    'last_page_url' => $trainingRecords->url($trainingRecords->lastPage()),
+                    'next_page_url' => $trainingRecords->nextPageUrl(),
+                    'prev_page_url' => $trainingRecords->previousPageUrl(),
+                ],
+                'filters' => [
+                    'search' => $search,
+                    'training_type' => $trainingType,
+                    'status' => $status,
+                    'employee' => $employee,
+                    'expiry' => $expiry,
+                    'department' => $department,
+                    'sort' => $sortField,
+                    'direction' => $sortDirection,
+                ],
+                'filterOptions' => $filterOptions,
+                'statistics' => $statistics,
+                'success' => session('success'),
+                'error' => session('error'),
+                'message' => session('message'),
+                'title' => 'Training Records Management',
+                'subtitle' => 'Kelola data pelatihan dan sertifikasi karyawan PT Gapura Angkasa',
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Training Index Error', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return Inertia::render('Training/Index', [
+                'trainingRecords' => ['data' => []],
+                'pagination' => [],
+                'filters' => [],
+                'filterOptions' => [],
+                'statistics' => [],
+                'error' => 'Error loading training records: ' . $e->getMessage(),
+                'title' => 'Training Records Management',
+                'subtitle' => 'Kelola data pelatihan dan sertifikasi karyawan PT Gapura Angkasa',
+            ]);
+        }
     }
 
     /**
-     * Show create training type form
+     * Show the form for creating a new training record
      */
     public function create()
     {
-        return Inertia::render('Training/Create');
+        try {
+            $employees = Employee::select('id', 'nip', 'nama_lengkap', 'unit_organisasi', 'jabatan')
+                                ->where('status_kerja', 'Aktif')
+                                ->orderBy('nama_lengkap')
+                                ->get();
+
+            $trainingTypes = TrainingType::select('id', 'name', 'category', 'validity_period')
+                                       ->where('is_active', true)
+                                       ->orderBy('category')
+                                       ->orderBy('name')
+                                       ->get();
+
+            return Inertia::render('Training/Create', [
+                'employees' => $employees,
+                'trainingTypes' => $trainingTypes,
+                'success' => session('success'),
+                'error' => session('error'),
+                'message' => session('message'),
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Training Create Error', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return redirect()->route('training.index')
+                ->with('error', 'Error loading create form: ' . $e->getMessage());
+        }
     }
 
     /**
-     * Store new training type
+     * Store a newly created training record
      */
     public function store(Request $request)
     {
-        $validated = $request->validate([
-            'name' => 'required|string|max:255',
-            'code' => 'required|string|max:100|unique:training_types',
-            'description' => 'nullable|string',
-            'duration_months' => 'required|integer|min:1|max:120',
-            'certificate_format' => 'nullable|string|max:255',
-            'requires_background_check' => 'boolean',
-            'is_active' => 'boolean',
-            'sort_order' => 'nullable|integer',
-        ]);
+        try {
+            // Validation rules
+            $validated = $request->validate([
+                'employee_id' => 'required|exists:employees,id',
+                'training_type_id' => 'required|exists:training_types,id',
+                'certificate_number' => 'required|string|max:255|unique:training_records,certificate_number',
+                'training_provider' => 'required|string|max:255',
+                'issue_date' => 'required|date',
+                'expiry_date' => 'required|date|after:issue_date',
+                'validity_period' => 'nullable|integer|min:1|max:120',
+                'training_location' => 'nullable|string|max:255',
+                'training_duration' => 'nullable|string|max:100',
+                'instructor_name' => 'nullable|string|max:255',
+                'completion_status' => 'required|in:completed,in_progress,failed,cancelled',
+                'training_cost' => 'nullable|numeric|min:0',
+                'internal_external' => 'required|in:internal,external',
+                'batch_id' => 'nullable|string|max:100',
+                'notes' => 'nullable|string',
+                'compliance_requirements' => 'nullable|string',
+                'renewal_required' => 'boolean',
+                'notification_before_expiry' => 'nullable|integer|min:1|max:365',
+                'certificate_file' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:10240', // 10MB
+                'supporting_documents.*' => 'nullable|file|mimes:pdf,jpg,jpeg,png,doc,docx|max:5120', // 5MB each
+            ]);
 
-        // Set default sort order if not provided
-        if (!isset($validated['sort_order'])) {
-            $validated['sort_order'] = TrainingType::max('sort_order') + 1;
+            DB::beginTransaction();
+
+            // Handle file uploads
+            $certificateFilePath = null;
+            if ($request->hasFile('certificate_file')) {
+                $certificateFilePath = $request->file('certificate_file')->store('certificates', 'public');
+            }
+
+            $supportingDocuments = [];
+            if ($request->hasFile('supporting_documents')) {
+                foreach ($request->file('supporting_documents') as $file) {
+                    $path = $file->store('supporting_documents', 'public');
+                    $supportingDocuments[] = [
+                        'filename' => $file->getClientOriginalName(),
+                        'path' => $path,
+                    ];
+                }
+            }
+
+            // Create training record
+            $trainingRecord = TrainingRecord::create([
+                'employee_id' => $validated['employee_id'],
+                'training_type_id' => $validated['training_type_id'],
+                'certificate_number' => $validated['certificate_number'],
+                'training_provider' => $validated['training_provider'],
+                'issue_date' => $validated['issue_date'],
+                'expiry_date' => $validated['expiry_date'],
+                'validity_period' => $validated['validity_period'],
+                'training_location' => $validated['training_location'],
+                'training_duration' => $validated['training_duration'],
+                'instructor_name' => $validated['instructor_name'],
+                'completion_status' => $validated['completion_status'],
+                'training_cost' => $validated['training_cost'],
+                'internal_external' => $validated['internal_external'],
+                'batch_id' => $validated['batch_id'],
+                'notes' => $validated['notes'],
+                'compliance_requirements' => $validated['compliance_requirements'],
+                'renewal_required' => $validated['renewal_required'] ?? false,
+                'notification_before_expiry' => $validated['notification_before_expiry'] ?? 30,
+                'certificate_file' => $certificateFilePath,
+                'supporting_documents' => !empty($supportingDocuments) ? json_encode($supportingDocuments) : null,
+                'created_by' => auth()->user()->name,
+            ]);
+
+            DB::commit();
+
+            return redirect()->route('training.index')
+                ->with('success', 'Training record created successfully!');
+
+        } catch (ValidationException $e) {
+            DB::rollBack();
+            return redirect()->back()
+                ->withErrors($e->errors())
+                ->withInput();
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Training Store Error', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'request_data' => $request->all()
+            ]);
+
+            return redirect()->back()
+                ->with('error', 'Error creating training record: ' . $e->getMessage())
+                ->withInput();
         }
-
-        TrainingType::create($validated);
-
-        return Redirect::route('training.index')
-                      ->with('success', 'Training type created successfully.');
     }
 
     /**
-     * Show edit training type form
+     * Display the specified training record
      */
-    public function edit(TrainingType $trainingType)
+    public function show(TrainingRecord $training)
     {
-        return Inertia::render('Training/Edit', [
-            'trainingType' => $trainingType,
-        ]);
-    }
+        try {
+            $training->load([
+                'employee:id,nip,nama_lengkap,unit_organisasi,jabatan,email,handphone',
+                'trainingType:id,name,category,validity_period'
+            ]);
 
-    /**
-     * Update training type
-     */
-    public function update(Request $request, TrainingType $trainingType)
-    {
-        $validated = $request->validate([
-            'name' => 'required|string|max:255',
-            'code' => 'required|string|max:100|unique:training_types,code,' . $trainingType->id,
-            'description' => 'nullable|string',
-            'duration_months' => 'required|integer|min:1|max:120',
-            'certificate_format' => 'nullable|string|max:255',
-            'requires_background_check' => 'boolean',
-            'is_active' => 'boolean',
-            'sort_order' => 'nullable|integer',
-        ]);
+            return Inertia::render('Training/Show', [
+                'training' => $training,
+                'success' => session('success'),
+                'error' => session('error'),
+                'message' => session('message'),
+            ]);
 
-        $trainingType->update($validated);
+        } catch (\Exception $e) {
+            Log::error('Training Show Error', [
+                'training_id' => $training->id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
 
-        return Redirect::route('training.index')
-                      ->with('success', 'Training type updated successfully.');
-    }
-
-    /**
-     * Delete training type
-     */
-    public function destroy(TrainingType $trainingType)
-    {
-        // Check if training type has records
-        if ($trainingType->trainingRecords()->count() > 0) {
-            return Redirect::back()
-                          ->with('error', 'Cannot delete training type that has existing records.');
+            return redirect()->route('training.index')
+                ->with('error', 'Error loading training record: ' . $e->getMessage());
         }
-
-        $trainingType->delete();
-
-        return Redirect::route('training.index')
-                      ->with('success', 'Training type deleted successfully.');
     }
 
     /**
-     * Get training statistics
+     * Show the form for editing the specified training record
      */
-    private function getTrainingStatistics()
+    public function edit(TrainingRecord $training)
     {
-        $totalTypes = TrainingType::count();
-        $activeTypes = TrainingType::active()->count();
-        $totalRecords = TrainingRecord::count();
-        $activeRecords = TrainingRecord::where('status', 'active')->count();
-        $expiredRecords = TrainingRecord::where('status', 'expired')->count();
-        $expiringSoonRecords = TrainingRecord::where('status', 'expiring_soon')->count();
+        try {
+            $training->load([
+                'employee:id,nip,nama_lengkap,unit_organisasi,jabatan',
+                'trainingType:id,name,category,validity_period'
+            ]);
+
+            $employees = Employee::select('id', 'nip', 'nama_lengkap', 'unit_organisasi', 'jabatan')
+                                ->where('status_kerja', 'Aktif')
+                                ->orderBy('nama_lengkap')
+                                ->get();
+
+            $trainingTypes = TrainingType::select('id', 'name', 'category', 'validity_period')
+                                       ->where('is_active', true)
+                                       ->orderBy('category')
+                                       ->orderBy('name')
+                                       ->get();
+
+            return Inertia::render('Training/Edit', [
+                'training' => $training,
+                'employees' => $employees,
+                'trainingTypes' => $trainingTypes,
+                'success' => session('success'),
+                'error' => session('error'),
+                'message' => session('message'),
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Training Edit Error', [
+                'training_id' => $training->id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return redirect()->route('training.index')
+                ->with('error', 'Error loading edit form: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Update the specified training record
+     */
+    public function update(Request $request, TrainingRecord $training)
+    {
+        try {
+            // Validation rules
+            $validated = $request->validate([
+                'employee_id' => 'required|exists:employees,id',
+                'training_type_id' => 'required|exists:training_types,id',
+                'certificate_number' => 'required|string|max:255|unique:training_records,certificate_number,' . $training->id,
+                'training_provider' => 'required|string|max:255',
+                'issue_date' => 'required|date',
+                'expiry_date' => 'required|date|after:issue_date',
+                'validity_period' => 'nullable|integer|min:1|max:120',
+                'training_location' => 'nullable|string|max:255',
+                'training_duration' => 'nullable|string|max:100',
+                'instructor_name' => 'nullable|string|max:255',
+                'completion_status' => 'required|in:completed,in_progress,failed,cancelled',
+                'training_cost' => 'nullable|numeric|min:0',
+                'internal_external' => 'required|in:internal,external',
+                'batch_id' => 'nullable|string|max:100',
+                'notes' => 'nullable|string',
+                'compliance_requirements' => 'nullable|string',
+                'renewal_required' => 'boolean',
+                'notification_before_expiry' => 'nullable|integer|min:1|max:365',
+                'certificate_file' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:10240',
+                'supporting_documents.*' => 'nullable|file|mimes:pdf,jpg,jpeg,png,doc,docx|max:5120',
+            ]);
+
+            DB::beginTransaction();
+
+            // Handle certificate file upload
+            $certificateFilePath = $training->certificate_file;
+            if ($request->hasFile('certificate_file')) {
+                // Delete old file
+                if ($certificateFilePath) {
+                    Storage::disk('public')->delete($certificateFilePath);
+                }
+                $certificateFilePath = $request->file('certificate_file')->store('certificates', 'public');
+            }
+
+            // Handle supporting documents
+            $supportingDocuments = $training->supporting_documents ? json_decode($training->supporting_documents, true) : [];
+            if ($request->hasFile('supporting_documents')) {
+                // Keep existing documents and add new ones
+                foreach ($request->file('supporting_documents') as $file) {
+                    $path = $file->store('supporting_documents', 'public');
+                    $supportingDocuments[] = [
+                        'filename' => $file->getClientOriginalName(),
+                        'path' => $path,
+                    ];
+                }
+            }
+
+            // Update training record
+            $training->update([
+                'employee_id' => $validated['employee_id'],
+                'training_type_id' => $validated['training_type_id'],
+                'certificate_number' => $validated['certificate_number'],
+                'training_provider' => $validated['training_provider'],
+                'issue_date' => $validated['issue_date'],
+                'expiry_date' => $validated['expiry_date'],
+                'validity_period' => $validated['validity_period'],
+                'training_location' => $validated['training_location'],
+                'training_duration' => $validated['training_duration'],
+                'instructor_name' => $validated['instructor_name'],
+                'completion_status' => $validated['completion_status'],
+                'training_cost' => $validated['training_cost'],
+                'internal_external' => $validated['internal_external'],
+                'batch_id' => $validated['batch_id'],
+                'notes' => $validated['notes'],
+                'compliance_requirements' => $validated['compliance_requirements'],
+                'renewal_required' => $validated['renewal_required'] ?? false,
+                'notification_before_expiry' => $validated['notification_before_expiry'] ?? 30,
+                'certificate_file' => $certificateFilePath,
+                'supporting_documents' => !empty($supportingDocuments) ? json_encode($supportingDocuments) : null,
+                'updated_by' => auth()->user()->name,
+            ]);
+
+            DB::commit();
+
+            return redirect()->route('training.index')
+                ->with('success', 'Training record updated successfully!');
+
+        } catch (ValidationException $e) {
+            DB::rollBack();
+            return redirect()->back()
+                ->withErrors($e->errors())
+                ->withInput();
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Training Update Error', [
+                'training_id' => $training->id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'request_data' => $request->all()
+            ]);
+
+            return redirect()->back()
+                ->with('error', 'Error updating training record: ' . $e->getMessage())
+                ->withInput();
+        }
+    }
+
+    /**
+     * Remove the specified training record
+     */
+    public function destroy(TrainingRecord $training)
+    {
+        try {
+            DB::beginTransaction();
+
+            // Delete associated files
+            if ($training->certificate_file) {
+                Storage::disk('public')->delete($training->certificate_file);
+            }
+
+            if ($training->supporting_documents) {
+                $documents = json_decode($training->supporting_documents, true);
+                foreach ($documents as $document) {
+                    Storage::disk('public')->delete($document['path']);
+                }
+            }
+
+            // Delete the training record
+            $training->delete();
+
+            DB::commit();
+
+            return redirect()->route('training.index')
+                ->with('success', 'Training record deleted successfully!');
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Training Delete Error', [
+                'training_id' => $training->id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return redirect()->route('training.index')
+                ->with('error', 'Error deleting training record: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Calculate training statistics
+     */
+    private function calculateTrainingStatistics()
+    {
+        $today = Carbon::today();
 
         return [
-            'totalTypes' => $totalTypes,
-            'activeTypes' => $activeTypes,
-            'totalRecords' => $totalRecords,
-            'activeRecords' => $activeRecords,
-            'expiredRecords' => $expiredRecords,
-            'expiringSoonRecords' => $expiringSoonRecords,
+            'total' => TrainingRecord::count(),
+            'valid' => TrainingRecord::where('expiry_date', '>', $today)->count(),
+            'expired' => TrainingRecord::where('expiry_date', '<=', $today)->count(),
+            'dueSoon' => TrainingRecord::whereBetween('expiry_date', [$today, $today->copy()->addDays(30)])->count(),
+            'uniqueTrainingTypes' => TrainingRecord::distinct('training_type_id')->count(),
+            'uniqueEmployees' => TrainingRecord::distinct('employee_id')->count(),
+            'thisMonth' => TrainingRecord::whereMonth('created_at', $today->month)
+                                       ->whereYear('created_at', $today->year)
+                                       ->count(),
         ];
     }
 
     /**
-     * Update training type order
+     * Get filter options
      */
-    public function updateOrder(Request $request)
+    private function getFilterOptions()
     {
-        $validated = $request->validate([
-            'items' => 'required|array',
-            'items.*.id' => 'required|exists:training_types,id',
-            'items.*.sort_order' => 'required|integer|min:0',
-        ]);
-
-        foreach ($validated['items'] as $item) {
-            TrainingType::where('id', $item['id'])
-                        ->update(['sort_order' => $item['sort_order']]);
-        }
-
-        return response()->json(['message' => 'Training type order updated successfully.']);
+        return [
+            'trainingTypes' => TrainingType::select('id', 'name', 'category')
+                                         ->where('is_active', true)
+                                         ->orderBy('category')
+                                         ->orderBy('name')
+                                         ->get(),
+            'departments' => Employee::distinct('unit_organisasi')
+                                   ->whereNotNull('unit_organisasi')
+                                   ->where('unit_organisasi', '!=', '')
+                                   ->orderBy('unit_organisasi')
+                                   ->pluck('unit_organisasi'),
+            'employees' => Employee::select('id', 'nip', 'nama_lengkap')
+                                 ->whereHas('trainingRecords')
+                                 ->orderBy('nama_lengkap')
+                                 ->get(),
+        ];
     }
 
     /**
-     * Toggle training type status
+     * Download certificate file
      */
-    public function toggleStatus(TrainingType $trainingType)
+    public function downloadCertificate(TrainingRecord $training)
     {
-        $trainingType->update([
-            'is_active' => !$trainingType->is_active
-        ]);
-
-        $status = $trainingType->is_active ? 'activated' : 'deactivated';
-
-        return Redirect::back()
-                      ->with('success', "Training type {$status} successfully.");
-    }
-
-    /**
-     * Get training compliance report
-     */
-    public function complianceReport()
-    {
-        $departments = Employee::select('unit_organisasi')
-                              ->distinct()
-                              ->whereNotNull('unit_organisasi')
-                              ->pluck('unit_organisasi');
-
-        $trainingTypes = TrainingType::active()->get();
-        $report = [];
-
-        foreach ($departments as $department) {
-            $employees = Employee::where('unit_organisasi', $department)->get();
-            $departmentData = [
-                'department' => $department,
-                'totalEmployees' => $employees->count(),
-                'trainingCompliance' => [],
-                'overallCompliance' => 0,
-            ];
-
-            foreach ($trainingTypes as $trainingType) {
-                $compliantEmployees = $employees->filter(function($employee) use ($trainingType) {
-                    return $employee->hasValidTraining($trainingType->code);
-                })->count();
-
-                $complianceRate = $employees->count() > 0
-                    ? round(($compliantEmployees / $employees->count()) * 100, 1)
-                    : 0;
-
-                $departmentData['trainingCompliance'][] = [
-                    'trainingType' => $trainingType->name,
-                    'compliantEmployees' => $compliantEmployees,
-                    'totalEmployees' => $employees->count(),
-                    'complianceRate' => $complianceRate,
-                ];
+        try {
+            if (!$training->certificate_file) {
+                return redirect()->back()->with('error', 'No certificate file found.');
             }
 
-            // Calculate overall compliance
-            $totalRequired = $employees->count() * $trainingTypes->count();
-            $totalCompliant = 0;
+            $filePath = storage_path('app/public/' . $training->certificate_file);
 
-            foreach ($employees as $employee) {
-                $totalCompliant += $employee->activeTrainingRecords()->count();
+            if (!file_exists($filePath)) {
+                return redirect()->back()->with('error', 'Certificate file not found.');
             }
 
-            $departmentData['overallCompliance'] = $totalRequired > 0
-                ? round(($totalCompliant / $totalRequired) * 100, 1)
-                : 0;
+            $filename = 'Certificate_' . $training->certificate_number . '_' . $training->employee->nama_lengkap . '.pdf';
 
-            $report[] = $departmentData;
+            return response()->download($filePath, $filename);
+
+        } catch (\Exception $e) {
+            Log::error('Certificate Download Error', [
+                'training_id' => $training->id,
+                'error' => $e->getMessage()
+            ]);
+
+            return redirect()->back()->with('error', 'Error downloading certificate.');
         }
-
-        return response()->json($report);
     }
 }

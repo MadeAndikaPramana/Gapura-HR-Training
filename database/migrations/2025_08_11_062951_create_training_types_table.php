@@ -4,30 +4,53 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
+// File: database/migrations/2025_08_11_062951_create_training_types_table.php
+
 return new class extends Migration
 {
     /**
      * Run the migrations.
-     * Create training_types table for GAPURA ANGKASA Training System
-     * Based on Excel analysis: 5 training types with different durations
+     * CREATE training_types table for GAPURA ANGKASA Training System
+     * Complete version with all fields needed for aviation training
      */
     public function up(): void
     {
         Schema::create('training_types', function (Blueprint $table) {
             $table->id();
-            $table->string('name'); // e.g., "PAX & BAGGAGE HANDLING"
-            $table->string('code')->unique(); // e.g., "PAX_HANDLING"
-            $table->text('description')->nullable();
-            $table->integer('duration_months'); // 36, 24, or 12 months
-            $table->string('certificate_format')->nullable(); // e.g., "GLC/OPR-{number}/{month}/{year}"
-            $table->boolean('requires_background_check')->default(false);
-            $table->boolean('is_active')->default(true);
-            $table->integer('sort_order')->default(0); // For ordering in UI
-            $table->timestamps();
 
-            // Indexes
-            $table->index(['is_active', 'sort_order']);
-            $table->index('code');
+            // Basic training information
+            $table->string('name'); // e.g., "Dangerous Goods Handling (DGR)"
+            $table->string('category')->default('OPERATIONAL'); // SAFETY, OPERATIONAL, TECHNICAL, etc.
+            $table->text('description')->nullable();
+
+            // Validity and duration
+            $table->integer('validity_period'); // Duration in months (24, 36, etc.)
+
+            // Mandatory and compliance
+            $table->boolean('is_mandatory')->default(false);
+            $table->boolean('is_active')->default(true);
+            $table->enum('compliance_level', ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'OPTIONAL'])->default('MEDIUM');
+
+            // Provider and cost information
+            $table->string('training_provider_default')->nullable();
+            $table->decimal('cost_estimate', 12, 2)->nullable();
+
+            // Requirements and renewal
+            $table->json('requirements')->nullable(); // Array of requirements
+            $table->boolean('renewal_required')->default(true);
+            $table->integer('notification_days')->default(30); // Days before expiry to notify
+
+            // Audit fields
+            $table->string('created_by')->nullable();
+            $table->string('updated_by')->nullable();
+
+            $table->timestamps();
+            $table->softDeletes(); // Enable soft deletes
+
+            // Indexes for performance
+            $table->index(['is_active', 'is_mandatory']);
+            $table->index(['category', 'is_active']);
+            $table->index('compliance_level');
         });
     }
 

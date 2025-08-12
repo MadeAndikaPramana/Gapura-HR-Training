@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Carbon\Carbon;
 
 class BackgroundCheck extends Model
@@ -27,26 +28,35 @@ class BackgroundCheck extends Model
     protected $casts = [
         'check_date' => 'date',
         'valid_until' => 'date',
-        'documents' => 'array',
         'imported_at' => 'datetime',
+        'documents' => 'array',
+        'created_at' => 'datetime',
+        'updated_at' => 'datetime',
     ];
 
-    // Constants for check types and statuses
+    protected $dates = [
+        'check_date',
+        'valid_until',
+        'imported_at',
+        'created_at',
+        'updated_at',
+    ];
+
+    // Check status constants
+    const STATUS_PENDING = 'pending';
+    const STATUS_IN_PROGRESS = 'in_progress';
+    const STATUS_PASSED = 'passed';
+    const STATUS_FAILED = 'failed';
+    const STATUS_EXPIRED = 'expired';
+    const STATUS_REQUIRES_RENEWAL = 'requires_renewal';
+
+    // Check type constants
     const CHECK_TYPES = [
         'security_clearance' => 'Security Clearance',
-        'criminal_background' => 'Criminal Background',
+        'criminal_background' => 'Criminal Background Check',
         'employment_verification' => 'Employment Verification',
         'reference_check' => 'Reference Check',
         'periodic_review' => 'Periodic Review',
-    ];
-
-    const STATUSES = [
-        'pending' => 'Pending',
-        'in_progress' => 'In Progress',
-        'passed' => 'Passed',
-        'failed' => 'Failed',
-        'expired' => 'Expired',
-        'requires_renewal' => 'Requires Renewal',
     ];
 
     // Relationships
@@ -58,223 +68,129 @@ class BackgroundCheck extends Model
     // Scopes
     public function scopePassed($query)
     {
-        return $query->where('status', 'passed');
-    }
-
-    public function scopeFailed($query)
-    {
-        return $query->where('status', 'failed');
+        return $query->where('status', self::STATUS_PASSED);
     }
 
     public function scopePending($query)
     {
-        return $query->whereIn('status', ['pending', 'in_progress']);
+        return $query->where('status', self::STATUS_PENDING);
+    }
+
+    public function scopeFailed($query)
+    {
+        return $query->where('status', self::STATUS_FAILED);
     }
 
     public function scopeExpired($query)
     {
-        return $query->where('valid_until', '<', now()->toDateString())
-                     ->orWhere('status', 'expired');
-    }
-
-    public function scopeRequiresRenewal($query, $days = 60)
-    {
-        return $query->where('valid_until', '<=', now()->addDays($days)->toDateString())
-                     ->where('valid_until', '>=', now()->toDateString())
-                     ->where('status', 'passed');
+        return $query->where('status', self::STATUS_EXPIRED)
+                    ->orWhere('valid_until', '<', Carbon::today());
     }
 
     public function scopeValid($query)
     {
-        return $query->where('status', 'passed')
-                     ->where(function($q) {
-                         $q->whereNull('valid_until')
-                           ->orWhere('valid_until', '>=', now()->toDateString());
-                     });
+        return $query->where('status', self::STATUS_PASSED)
+                    ->where(function($q) {
+                        $q->whereNull('valid_until')
+                          ->orWhere('valid_until', '>', Carbon::today());
+                    });
     }
 
-    public function scopeByCheckType($query, $type)
+    public function scopeExpiringSoon($query, $days = 30)
+    {
+        $today = Carbon::today();
+        return $query->whereBetween('valid_until', [$today, $today->copy()->addDays($days)]);
+    }
+
+    public function scopeByType($query, $type)
     {
         return $query->where('check_type', $type);
     }
 
-    public function scopeByDepartment($query, $department)
+    public function scopeByStatus($query, $status)
     {
-        return $query->whereHas('employee', function ($q) use ($department) {
-            $q->where('unit_organisasi', $department);
-        });
-    }
-
-    public function scopeRecent($query, $days = 30)
-    {
-        return $query->where('check_date', '>=', now()->subDays($days)->toDateString());
+        return $query->where('status', $status);
     }
 
     // Accessors
-    public function getIsValidAttribute()
-    {
-        return $this->status === 'passed' &&
-               (!$this->valid_until || $this->valid_until->isFuture());
-    }
-
-    public function getIsExpiredAttribute()
-    {
-        return $this->valid_until && $this->valid_until->isPast();
-    }
-
-    public function getRequiresRenewalAttribute()
-    {
-        if (!$this->valid_until || $this->status !== 'passed') return false;
-        return $this->valid_until->diffInDays(now()) <= 60 && !$this->is_expired;
-    }
-
-    public function getDaysUntilExpiryAttribute()
-    {
-        if (!$this->valid_until) return null;
-        $diff = $this->valid_until->diffInDays(now(), false);
-        return $diff < 0 ? 0 : $diff;
-    }
-
-    public function getStatusBadgeColorAttribute()
-    {
-        if ($this->is_expired) return 'red';
-        if ($this->requires_renewal) return 'yellow';
-
-        return match($this->status) {
-            'passed' => 'green',
-            'failed' => 'red',
-            'expired' => 'red',
-            'requires_renewal' => 'yellow',
-            'pending' => 'blue',
-            'in_progress' => 'blue',
-            default => 'gray',
-        };
-    }
-
     public function getStatusTextAttribute()
     {
-        if ($this->is_expired) return 'Expired';
-        if ($this->requires_renewal) return 'Requires Renewal';
-
-        return self::STATUSES[$this->status] ?? ucfirst(str_replace('_', ' ', $this->status));
+        return match($this->status) {
+            self::STATUS_PENDING => 'Pending',
+            self::STATUS_IN_PROGRESS => 'In Progress',
+            self::STATUS_PASSED => 'Passed',
+            self::STATUS_FAILED => 'Failed',
+            self::STATUS_EXPIRED => 'Expired',
+            self::STATUS_REQUIRES_RENEWAL => 'Requires Renewal',
+            default => 'Unknown',
+        };
     }
 
     public function getCheckTypeTextAttribute()
     {
-        return self::CHECK_TYPES[$this->check_type] ?? ucfirst(str_replace('_', ' ', $this->check_type));
+        return self::CHECK_TYPES[$this->check_type] ?? $this->check_type;
     }
 
-    public function getEmployeeNameAttribute()
+    public function getIsValidAttribute()
     {
-        return $this->employee ? $this->employee->nama_lengkap : 'Unknown';
+        if ($this->status !== self::STATUS_PASSED) {
+            return false;
+        }
+
+        if ($this->valid_until) {
+            return Carbon::parse($this->valid_until)->isFuture();
+        }
+
+        return true;
     }
 
-    public function getValidityPeriodAttribute()
+    public function getIsExpiringAttribute()
     {
-        if (!$this->check_date) return null;
+        if (!$this->valid_until || $this->status !== self::STATUS_PASSED) {
+            return false;
+        }
 
-        $from = $this->check_date->format('d M Y');
-        $until = $this->valid_until ? $this->valid_until->format('d M Y') : 'Permanent';
-
-        return $from . ' - ' . $until;
+        $daysUntilExpiry = Carbon::today()->diffInDays(Carbon::parse($this->valid_until), false);
+        return $daysUntilExpiry >= 0 && $daysUntilExpiry <= 30;
     }
 
-    // Auto-update status based on dates
-    protected static function booted()
+    public function getDaysUntilExpiryAttribute()
     {
-        static::saving(function ($backgroundCheck) {
-            if ($backgroundCheck->valid_until && $backgroundCheck->status === 'passed') {
-                $now = now()->toDateString();
-                $renewalWarningDate = now()->addDays(60)->toDateString();
+        if (!$this->valid_until) {
+            return null;
+        }
 
-                if ($backgroundCheck->valid_until < $now) {
-                    $backgroundCheck->status = 'expired';
-                } elseif ($backgroundCheck->valid_until <= $renewalWarningDate) {
-                    $backgroundCheck->status = 'requires_renewal';
-                }
-            }
-        });
+        return Carbon::today()->diffInDays(Carbon::parse($this->valid_until), false);
     }
 
     // Helper methods
-    public function renew($newValidUntil, $notes = null)
+    public function isValid()
     {
-        $this->update([
-            'valid_until' => $newValidUntil,
-            'status' => 'passed',
-            'check_date' => now()->toDateString(),
-            'notes' => $notes ? ($this->notes . "\nRenewed: " . $notes) : $this->notes,
-        ]);
+        return $this->is_valid;
     }
 
-    public function markAsExpired($reason = null)
+    public function isExpiring($days = 30)
     {
-        $this->update([
-            'status' => 'expired',
-            'notes' => $reason ? ($this->notes . "\nExpired: " . $reason) : $this->notes,
-        ]);
+        return $this->is_expiring;
     }
 
-    public function addDocument($documentPath, $documentType = null)
+    public function hasDocuments()
     {
-        $documents = $this->documents ?? [];
-        $documents[] = [
-            'path' => $documentPath,
-            'type' => $documentType,
-            'uploaded_at' => now()->toISOString(),
-        ];
-
-        $this->update(['documents' => $documents]);
+        return !empty($this->documents);
     }
 
-    // Static helper methods
-    public static function getComplianceStats($departmentFilter = null)
+    public function getDocumentUrls()
     {
-        $query = self::query();
-
-        if ($departmentFilter) {
-            $query->byDepartment($departmentFilter);
+        if (!$this->documents) {
+            return [];
         }
 
-        $total = $query->count();
-        $valid = $query->clone()->valid()->count();
-        $expired = $query->clone()->expired()->count();
-        $requiresRenewal = $query->clone()->requiresRenewal()->count();
-        $pending = $query->clone()->pending()->count();
-
-        return [
-            'total' => $total,
-            'valid' => $valid,
-            'expired' => $expired,
-            'requires_renewal' => $requiresRenewal,
-            'pending' => $pending,
-            'compliance_rate' => $total > 0 ? round(($valid / $total) * 100, 2) : 0
-        ];
-    }
-
-    public static function getExpiringChecks($days = 60)
-    {
-        return self::with(['employee'])
-                   ->requiresRenewal($days)
-                   ->orderBy('valid_until')
-                   ->get();
-    }
-
-    public static function getExpiredChecks()
-    {
-        return self::with(['employee'])
-                   ->expired()
-                   ->orderBy('valid_until', 'desc')
-                   ->get();
-    }
-
-    public static function getCheckTypeOptions()
-    {
-        return self::CHECK_TYPES;
-    }
-
-    public static function getStatusOptions()
-    {
-        return self::STATUSES;
+        return collect($this->documents)->map(function ($doc) {
+            return [
+                'filename' => $doc['filename'] ?? 'Unknown',
+                'url' => asset('storage/' . $doc['path']),
+                'path' => $doc['path'],
+            ];
+        })->toArray();
     }
 }

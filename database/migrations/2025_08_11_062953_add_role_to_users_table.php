@@ -4,6 +4,8 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
+// File: database/migrations/2025_08_11_062953_add_role_to_users_table.php
+
 return new class extends Migration
 {
     /**

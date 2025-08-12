@@ -20,56 +20,67 @@ export default function DashboardLayout({ children, title = "Dashboard" }) {
     const { auth } = usePage().props;
     const [sidebarOpen, setSidebarOpen] = useState(false);
 
-    const navigation = [
-        {
-            name: 'Dashboard',
-            href: '/dashboard',
-            icon: Home,
-            current: route().current('dashboard')
-        },
-        {
-            name: 'Training Records',
-            href: '/training',
-            icon: GraduationCap,
-            current: route().current('training.*')
-        },
-        {
-            name: 'Employees',
-            href: '/employees',
-            icon: Users,
-            current: route().current('employees.*')
-        },
-        {
-            name: 'Certificates',
-            href: '/certificates',
-            icon: Award,
-            current: route().current('certificates.*')
-        },
-        {
-            name: 'Background Checks',
-            href: '/background-checks',
-            icon: FileCheck,
-            current: route().current('background-checks.*')
-        },
-        {
-            name: 'Schedules',
-            href: '/schedules',
-            icon: Calendar,
-            current: route().current('schedules.*')
-        },
-        {
-            name: 'Analytics',
-            href: '/analytics',
-            icon: BarChart3,
-            current: route().current('analytics.*')
-        },
-        {
-            name: 'Import/Export',
-            href: '/import-export',
-            icon: Upload,
-            current: route().current('import-export.*')
-        },
-    ];
+// Update resources/js/Layouts/DashboardLayout.jsx to include training navigation
+// Add this to the navigation array in DashboardLayout.jsx:
+
+const navigation = [
+    {
+        name: 'Dashboard',
+        href: '/dashboard',
+        icon: Home,
+        current: route().current('dashboard')
+    },
+    {
+        name: 'Employees',
+        href: '/employees',
+        icon: Users,
+        current: route().current('employees.*')
+    },
+    // ADD THESE TRAINING NAVIGATION ITEMS:
+    {
+        name: 'Training Records',
+        href: '/training',
+        icon: GraduationCap,
+        current: route().current('training.*')
+    },
+    {
+        name: 'Training Types',
+        href: '/training-types',
+        icon: BookOpen,
+        current: route().current('training-types.*')
+    },
+    {
+        name: 'Certificates',
+        href: '/certificates',
+        icon: Award,
+        current: route().current('certificates.*')
+    },
+    {
+        name: 'Background Checks',
+        href: '/background-checks',
+        icon: Shield,
+        current: route().current('background-checks.*')
+    },
+    {
+        name: 'Schedules',
+        href: '/schedules',
+        icon: Calendar,
+        current: route().current('schedules.*')
+    },
+    {
+        name: 'Analytics',
+        href: '/analytics',
+        icon: BarChart3,
+        current: route().current('analytics.*')
+    },
+    {
+        name: 'Import/Export',
+        href: '/import-export',
+        icon: Upload,
+        current: route().current('import-export.*')
+    },
+];
+
 
     const userNavigation = [
         { name: 'Settings', href: '/settings', icon: Settings },

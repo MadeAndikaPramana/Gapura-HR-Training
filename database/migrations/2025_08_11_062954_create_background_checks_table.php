@@ -4,19 +4,21 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
+// File: database/migrations/2025_08_11_062954_create_background_checks_table.php
+
 return new class extends Migration
 {
     /**
      * Run the migrations.
-     * Create background_checks table for GAPURA ANGKASA Training System
-     * Based on Excel analysis: Background check dates like "3 Oktober 2024"
+     * CREATE background_checks table for GAPURA ANGKASA Training System
+     * FIXED: Proper CREATE TABLE with correct employee relationship
      */
     public function up(): void
     {
         Schema::create('background_checks', function (Blueprint $table) {
             $table->id();
 
-            // Foreign key to employee
+            // Foreign key to employee - using nip for legacy compatibility
             $table->string('employee_nip', 20);
 
             // Background check details
@@ -52,7 +54,7 @@ return new class extends Migration
 
             $table->timestamps();
 
-            // Foreign key constraints
+            // Foreign key constraint - references employees.nip
             $table->foreign('employee_nip')->references('nip')->on('employees')->onDelete('cascade');
 
             // Indexes
