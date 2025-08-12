@@ -10,58 +10,48 @@ import {
     Edit,
     Trash2,
     Filter,
-    Download,
-    Award,
+    Users,
+    GraduationCap,
     AlertTriangle,
     Clock,
-    Calendar,
     ChevronDown,
     ChevronUp,
     MoreVertical,
-    GraduationCap,
-    Users,
-    CheckCircle,
-    XCircle,
-    AlertCircle,
-    RefreshCw,
-    Send,
-    Copy,
+    UserPlus,
+    UserCheck,
+    UserX,
     Building,
+    Calendar,
     Mail,
     Phone,
     Badge,
-    CreditCard,
-    FileText,
-    Bell,
-    Settings,
+    Award,
+    AlertCircle,
+    CheckCircle,
+    XCircle,
 } from "lucide-react";
 
 export default function Index({
-    trainingRecords,
+    employees,
     filters,
-    trainingTypes,
     departments,
     stats,
-    notifications,
     title,
     subtitle,
     success,
     error,
-    auth,
 }) {
     // State management
     const [searchQuery, setSearchQuery] = useState(filters.search || "");
-    const [trainingTypeFilter, setTrainingTypeFilter] = useState(
-        filters.training_type || "all"
-    );
     const [departmentFilter, setDepartmentFilter] = useState(
         filters.department || "all"
     );
     const [statusFilter, setStatusFilter] = useState(filters.status || "all");
-    const [dateFromFilter, setDateFromFilter] = useState(filters.date_from || "");
-    const [dateToFilter, setDateToFilter] = useState(filters.date_to || "");
+    const [complianceFilter, setComplianceFilter] = useState(
+        filters.compliance || "all"
+    );
     const [showFilters, setShowFilters] = useState(false);
-    const [selectedRecords, setSelectedRecords] = useState([]);
+    const [selectedEmployees, setSelectedEmployees] = useState([]);
     const [bulkAction, setBulkAction] = useState("");
     const [loading, setLoading] = useState(false);
 
@@ -69,7 +59,7 @@ export default function Index({
     const [searchTimeout, setSearchTimeout] = useState(null);
 
     // Sort state
-    const [sortField, setSortField] = useState(filters.sort || "expiry_date");
+    const [sortField, setSortField] = useState(filters.sort || "name");
     const [sortDirection, setSortDirection] = useState(
         filters.direction || "asc"
     );
@@ -78,11 +68,9 @@ export default function Index({
     const applyFilters = () => {
         const params = {
             search: searchQuery,
-            training_type: trainingTypeFilter,
             department: departmentFilter,
             status: statusFilter,
-            date_from: dateFromFilter,
-            date_to: dateToFilter,
+            compliance: complianceFilter,
             sort: sortField,
             direction: sortDirection,
         };
@@ -95,7 +83,7 @@ export default function Index({
         });
 
         setLoading(true);
-        router.get(route("training.index"), params, {
+        router.get(route("employees.index"), params, {
             preserveState: true,
             onFinish: () => setLoading(false),
         });
@@ -121,15 +109,13 @@ export default function Index({
     // Apply filters when other filters change
     useEffect(() => {
         if (
-            trainingTypeFilter !== filters.training_type ||
             departmentFilter !== filters.department ||
             statusFilter !== filters.status ||
-            dateFromFilter !== filters.date_from ||
-            dateToFilter !== filters.date_to
+            complianceFilter !== filters.compliance
         ) {
             applyFilters();
         }
-    }, [trainingTypeFilter, departmentFilter, statusFilter, dateFromFilter, dateToFilter]);
+    }, [departmentFilter, statusFilter, complianceFilter]);
 
     // Sort function
     const handleSort = (field) => {
@@ -139,7 +125,7 @@ export default function Index({
         setSortDirection(direction);
 
         router.get(
-            route("training.index"),
+            route("employees.index"),
             {
                 ...filters,
                 sort: field,
@@ -149,92 +135,84 @@ export default function Index({
         );
     };
 
-    // Select/deselect records
-    const toggleRecordSelection = (recordId) => {
-        setSelectedRecords((prev) =>
-            prev.includes(recordId)
-                ? prev.filter((id) => id !== recordId)
-                : [...prev, recordId]
+    // Select/deselect employees
+    const toggleEmployeeSelection = (employeeId) => {
+        setSelectedEmployees((prev) =>
+            prev.includes(employeeId)
+                ? prev.filter((id) => id !== employeeId)
+                : [...prev, employeeId]
         );
     };
 
-    const selectAllRecords = () => {
-        if (selectedRecords.length === trainingRecords.data.length) {
-            setSelectedRecords([]);
+    const selectAllEmployees = () => {
+        if (selectedEmployees.length === employees.data.length) {
+            setSelectedEmployees([]);
         } else {
-            setSelectedRecords(trainingRecords.data.map((record) => record.id));
+            setSelectedEmployees(employees.data.map((emp) => emp.id));
         }
     };
 
     // Bulk operations
     const handleBulkAction = () => {
-        if (!bulkAction || selectedRecords.length === 0) return;
+        if (!bulkAction || selectedEmployees.length === 0) return;
 
-        if (bulkAction === 'export') {
-            router.post(route("training.export-selected"), {
-                training_record_ids: selectedRecords,
-            });
-        } else if (bulkAction === 'generate_certificates') {
-            router.post(route("training.bulk-generate-certificates"), {
-                training_record_ids: selectedRecords,
-            });
-        } else {
-            router.post(route("training.bulk-update"), {
-                training_record_ids: selectedRecords,
+        router.post(
+            route("employees.bulk-update"),
+            {
+                employee_ids: selectedEmployees,
                 action: bulkAction,
-            });
-        }
-
-        setSelectedRecords([]);
-        setBulkAction("");
+            },
+            {
+                onSuccess: () => {
+                    setSelectedEmployees([]);
+                    setBulkAction("");
+                },
+            }
+        );
     };
 
     // Get status badge
-    const getStatusBadge = (record) => {
-        const now = new Date();
-        const expiryDate = new Date(record.expiry_date);
-        const thirtyDaysFromNow = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
-
-        if (expiryDate < now) {
+    const getStatusBadge = (employee) => {
+        if (!employee.is_active) {
             return (
                 <span className="badge-gapura-red">
                     <XCircle className="w-3 h-3 mr-1" />
-                    Expired
-                </span>
-            );
-        } else if (expiryDate <= thirtyDaysFromNow) {
-            return (
-                <span className="badge-gapura-yellow">
-                    <AlertCircle className="w-3 h-3 mr-1" />
-                    Expiring Soon
-                </span>
-            );
-        } else {
-            return (
-                <span className="badge-gapura-green">
-                    <CheckCircle className="w-3 h-3 mr-1" />
-                    Valid
+                    Inactive
                 </span>
             );
         }
+        return (
+            <span className="badge-gapura-green">
+                <CheckCircle className="w-3 h-3 mr-1" />
+                Active
+            </span>
+        );
     };
 
-    // Get days until expiry
-    const getDaysUntilExpiry = (expiryDate) => {
-        const now = new Date();
-        const expiry = new Date(expiryDate);
-        const diffTime = expiry - now;
-        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-        return diffDays;
-    };
-
-    // Format currency
-    const formatCurrency = (amount) => {
-        return new Intl.NumberFormat('id-ID', {
-            style: 'currency',
-            currency: 'IDR',
-            minimumFractionDigits: 0,
-        }).format(amount);
+    // Get training compliance badge
+    const getComplianceBadge = (stats) => {
+        if (stats.expired_trainings > 0) {
+            return (
+                <span className="badge-gapura-red">
+                    <AlertCircle className="w-3 h-3 mr-1" />
+                    {stats.expired_trainings} Expired
+                </span>
+            );
+        }
+        if (stats.expiring_soon > 0) {
+            return (
+                <span className="badge-gapura-yellow">
+                    <Clock className="w-3 h-3 mr-1" />
+                    {stats.expiring_soon} Expiring
+                </span>
+            );
+        }
+        return (
+            <span className="badge-gapura-green">
+                <Award className="w-3 h-3 mr-1" />
+                Compliant
+            </span>
+        );
     };
 
     return (
@@ -252,22 +230,15 @@ export default function Index({
                     </div>
                     <div className="flex items-center space-x-3">
                         <button
-                            onClick={() => router.get(route("training.download-import-template"))}
+                            onClick={() => router.get(route("employees.export"))}
                             className="btn-gapura-secondary"
                         >
                             <FileDown className="w-4 h-4 mr-2" />
-                            Template
+                            Export
                         </button>
-                        <button
-                            onClick={() => router.get(route("training.export"))}
-                            className="btn-gapura-secondary"
-                        >
-                            <FileDown className="w-4 h-4 mr-2" />
-                            Export All
-                        </button>
-                        <Link href={route("training.create")} className="btn-gapura">
+                        <Link href={route("employees.create")} className="btn-gapura">
                             <Plus className="w-4 h-4 mr-2" />
-                            Add Training
+                            Add Employee
                         </Link>
                     </div>
                 </div>
@@ -277,14 +248,14 @@ export default function Index({
                     <div className="card-gapura p-6">
                         <div className="flex items-center">
                             <div className="p-3 bg-blue-100 rounded-lg">
-                                <GraduationCap className="w-8 h-8 text-blue-600" />
+                                <Users className="w-8 h-8 text-blue-600" />
                             </div>
                             <div className="ml-4">
                                 <p className="text-sm font-medium text-gray-600">
-                                    Total Records
+                                    Total Employees
                                 </p>
                                 <p className="text-2xl font-bold text-gray-900">
-                                    {stats.total_records}
+                                    {stats.total_employees}
                                 </p>
                             </div>
                         </div>
@@ -293,14 +264,30 @@ export default function Index({
                     <div className="card-gapura p-6">
                         <div className="flex items-center">
                             <div className="p-3 bg-green-100 rounded-lg">
-                                <CheckCircle className="w-8 h-8 text-green-600" />
+                                <UserCheck className="w-8 h-8 text-green-600" />
                             </div>
                             <div className="ml-4">
                                 <p className="text-sm font-medium text-gray-600">
-                                    Valid Certificates
+                                    Active Employees
                                 </p>
                                 <p className="text-2xl font-bold text-gray-900">
-                                    {stats.valid_records}
+                                    {stats.active_employees}
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="card-gapura p-6">
+                        <div className="flex items-center">
+                            <div className="p-3 bg-purple-100 rounded-lg">
+                                <GraduationCap className="w-8 h-8 text-purple-600" />
+                            </div>
+                            <div className="ml-4">
+                                <p className="text-sm font-medium text-gray-600">
+                                    Training Records
+                                </p>
+                                <p className="text-2xl font-bold text-gray-900">
+                                    {stats.total_trainings}
                                 </p>
                             </div>
                         </div>
@@ -316,49 +303,12 @@ export default function Index({
                                     Expiring Soon
                                 </p>
                                 <p className="text-2xl font-bold text-gray-900">
-                                    {stats.expiring_soon}
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="card-gapura p-6">
-                        <div className="flex items-center">
-                            <div className="p-3 bg-red-100 rounded-lg">
-                                <XCircle className="w-8 h-8 text-red-600" />
-                            </div>
-                            <div className="ml-4">
-                                <p className="text-sm font-medium text-gray-600">
-                                    Expired
-                                </p>
-                                <p className="text-2xl font-bold text-gray-900">
-                                    {stats.expired_records}
+                                    {stats.expiring_certificates}
                                 </p>
                             </div>
                         </div>
                     </div>
                 </div>
-
-                {/* Notifications Panel */}
-                {notifications.expiring_certificates.length > 0 && (
-                    <div className="card-gapura p-4 border-l-4 border-yellow-400 bg-yellow-50">
-                        <div className="flex items-center">
-                            <Bell className="w-5 h-5 text-yellow-600 mr-2" />
-                            <h3 className="text-sm font-medium text-yellow-800">
-                                Certificates Expiring Soon
-                            </h3>
-                        </div>
-                        <div className="mt-2 text-sm text-yellow-700">
-                            {notifications.expiring_certificates.length} certificates are expiring within 30 days.
-                            <button
-                                onClick={() => router.post(route("training.send-expiry-notifications"))}
-                                className="ml-2 text-yellow-800 hover:text-yellow-900 underline"
-                            >
-                                Send Notifications
-                            </button>
-                        </div>
-                    </div>
-                )}
 
                 {/* Filters and Search */}
                 <div className="card-gapura p-6">
@@ -368,7 +318,7 @@ export default function Index({
                             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
                             <input
                                 type="text"
-                                placeholder="Search training records..."
+                                placeholder="Search employees..."
                                 className="input-gapura pl-10"
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
@@ -395,25 +345,7 @@ export default function Index({
                     {/* Filter Options */}
                     {showFilters && (
                         <div className="mt-4 pt-4 border-t border-gray-200">
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                                        Training Type
-                                    </label>
-                                    <select
-                                        className="input-gapura"
-                                        value={trainingTypeFilter}
-                                        onChange={(e) => setTrainingTypeFilter(e.target.value)}
-                                    >
-                                        <option value="all">All Types</option>
-                                        {trainingTypes.map((type) => (
-                                            <option key={type.id} value={type.id}>
-                                                {type.name}
-                                            </option>
-                                        ))}
-                                    </select>
-                                </div>
-
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-2">
                                         Department
@@ -421,7 +353,9 @@ export default function Index({
                                     <select
                                         className="input-gapura"
                                         value={departmentFilter}
-                                        onChange={(e) => setDepartmentFilter(e.target.value)}
+                                        onChange={(e) =>
+                                            setDepartmentFilter(e.target.value)
+                                        }
                                     >
                                         <option value="all">All Departments</option>
                                         {departments.map((dept) => (
@@ -442,34 +376,27 @@ export default function Index({
                                         onChange={(e) => setStatusFilter(e.target.value)}
                                     >
                                         <option value="all">All Status</option>
-                                        <option value="valid">Valid</option>
-                                        <option value="expiring">Expiring Soon</option>
-                                        <option value="expired">Expired</option>
+                                        <option value="active">Active</option>
+                                        <option value="inactive">Inactive</option>
                                     </select>
                                 </div>
 
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                                        Date From
+                                        Training Compliance
                                     </label>
-                                    <input
-                                        type="date"
+                                    <select
                                         className="input-gapura"
-                                        value={dateFromFilter}
-                                        onChange={(e) => setDateFromFilter(e.target.value)}
-                                    />
-                                </div>
-
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                                        Date To
-                                    </label>
-                                    <input
-                                        type="date"
-                                        className="input-gapura"
-                                        value={dateToFilter}
-                                        onChange={(e) => setDateToFilter(e.target.value)}
-                                    />
+                                        value={complianceFilter}
+                                        onChange={(e) =>
+                                            setComplianceFilter(e.target.value)
+                                        }
+                                    >
+                                        <option value="all">All Compliance</option>
+                                        <option value="compliant">Compliant</option>
+                                        <option value="expiring">Expiring Soon</option>
+                                        <option value="expired">Expired</option>
+                                    </select>
                                 </div>
                             </div>
                         </div>
@@ -477,12 +404,12 @@ export default function Index({
                 </div>
 
                 {/* Bulk Actions */}
-                {selectedRecords.length > 0 && (
+                {selectedEmployees.length > 0 && (
                     <div className="card-gapura p-4">
                         <div className="flex items-center justify-between">
                             <div className="flex items-center space-x-4">
                                 <span className="text-sm text-gray-600">
-                                    {selectedRecords.length} record(s) selected
+                                    {selectedEmployees.length} employee(s) selected
                                 </span>
                                 <select
                                     className="input-gapura"
@@ -490,10 +417,11 @@ export default function Index({
                                     onChange={(e) => setBulkAction(e.target.value)}
                                 >
                                     <option value="">Select Action</option>
-                                    <option value="export">Export Selected</option>
-                                    <option value="generate_certificates">Generate Certificates</option>
-                                    <option value="extend">Extend Expiry</option>
-                                    <option value="update_provider">Update Provider</option>
+                                    <option value="activate">Activate</option>
+                                    <option value="deactivate">Deactivate</option>
+                                    <option value="update_department">
+                                        Change Department
+                                    </option>
                                 </select>
                             </div>
                             <button
@@ -507,7 +435,7 @@ export default function Index({
                     </div>
                 )}
 
-                {/* Training Records Table */}
+                {/* Employees Table */}
                 <div className="card-gapura overflow-hidden">
                     <div className="overflow-x-auto">
                         <table className="table-gapura">
@@ -517,20 +445,21 @@ export default function Index({
                                         <input
                                             type="checkbox"
                                             checked={
-                                                trainingRecords.data.length > 0 &&
-                                                selectedRecords.length === trainingRecords.data.length
+                                                employees.data.length > 0 &&
+                                                selectedEmployees.length ===
+                                                    employees.data.length
                                             }
-                                            onChange={selectAllRecords}
+                                            onChange={selectAllEmployees}
                                             className="rounded border-gray-300 text-gapura-green focus:ring-gapura-green"
                                         />
                                     </th>
                                     <th>
                                         <button
-                                            onClick={() => handleSort("employee_name")}
+                                            onClick={() => handleSort("name")}
                                             className="flex items-center space-x-1 hover:text-gapura-green"
                                         >
-                                            <span>Employee</span>
-                                            {sortField === "employee_name" &&
+                                            <span>Name</span>
+                                            {sortField === "name" &&
                                                 (sortDirection === "asc" ? (
                                                     <ChevronUp className="w-4 h-4" />
                                                 ) : (
@@ -538,13 +467,15 @@ export default function Index({
                                                 ))}
                                         </button>
                                     </th>
+                                    <th>NIK/NIP</th>
+                                    <th>Contact</th>
                                     <th>
                                         <button
-                                            onClick={() => handleSort("training_type")}
+                                            onClick={() => handleSort("department")}
                                             className="flex items-center space-x-1 hover:text-gapura-green"
                                         >
-                                            <span>Training Type</span>
-                                            {sortField === "training_type" &&
+                                            <span>Department</span>
+                                            {sortField === "department" &&
                                                 (sortDirection === "asc" ? (
                                                     <ChevronUp className="w-4 h-4" />
                                                 ) : (
@@ -552,48 +483,23 @@ export default function Index({
                                                 ))}
                                         </button>
                                     </th>
-                                    <th>Certificate</th>
-                                    <th>
-                                        <button
-                                            onClick={() => handleSort("issue_date")}
-                                            className="flex items-center space-x-1 hover:text-gapura-green"
-                                        >
-                                            <span>Issue Date</span>
-                                            {sortField === "issue_date" &&
-                                                (sortDirection === "asc" ? (
-                                                    <ChevronUp className="w-4 h-4" />
-                                                ) : (
-                                                    <ChevronDown className="w-4 h-4" />
-                                                ))}
-                                        </button>
-                                    </th>
-                                    <th>
-                                        <button
-                                            onClick={() => handleSort("expiry_date")}
-                                            className="flex items-center space-x-1 hover:text-gapura-green"
-                                        >
-                                            <span>Expiry Date</span>
-                                            {sortField === "expiry_date" &&
-                                                (sortDirection === "asc" ? (
-                                                    <ChevronUp className="w-4 h-4" />
-                                                ) : (
-                                                    <ChevronDown className="w-4 h-4" />
-                                                ))}
-                                        </button>
-                                    </th>
+                                    <th>Training Status</th>
                                     <th>Status</th>
-                                    <th>Provider</th>
                                     <th>Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                {trainingRecords.data.map((record) => (
-                                    <tr key={record.id} className="hover:bg-gray-50">
+                                {employees.data.map((employee) => (
+                                    <tr key={employee.id} className="hover:bg-gray-50">
                                         <td>
                                             <input
                                                 type="checkbox"
-                                                checked={selectedRecords.includes(record.id)}
-                                                onChange={() => toggleRecordSelection(record.id)}
+                                                checked={selectedEmployees.includes(
+                                                    employee.id
+                                                )}
+                                                onChange={() =>
+                                                    toggleEmployeeSelection(employee.id)
+                                                }
                                                 className="rounded border-gray-300 text-gapura-green focus:ring-gapura-green"
                                             />
                                         </td>
@@ -602,7 +508,7 @@ export default function Index({
                                                 <div className="flex-shrink-0 h-10 w-10">
                                                     <div className="h-10 w-10 rounded-full bg-gapura-green flex items-center justify-center">
                                                         <span className="text-sm font-medium text-white">
-                                                            {record.employee.name
+                                                            {employee.name
                                                                 .charAt(0)
                                                                 .toUpperCase()}
                                                         </span>
@@ -610,75 +516,65 @@ export default function Index({
                                                 </div>
                                                 <div className="ml-4">
                                                     <div className="text-sm font-medium text-gray-900">
-                                                        {record.employee.name}
+                                                        {employee.name}
                                                     </div>
                                                     <div className="text-sm text-gray-500">
-                                                        {record.employee.nip} • {record.employee.department}
+                                                        {employee.position}
                                                     </div>
                                                 </div>
                                             </div>
                                         </td>
                                         <td>
-                                            <div className="text-sm font-medium text-gray-900">
-                                                {record.training_type.name}
+                                            <div className="text-sm text-gray-900">
+                                                NIK: {employee.nik}
                                             </div>
                                             <div className="text-sm text-gray-500">
-                                                {record.training_type.category}
+                                                NIP: {employee.nip}
                                             </div>
                                         </td>
                                         <td>
-                                            <div className="text-sm text-gray-900">
-                                                {record.certificate_number || 'Not Generated'}
+                                            <div className="text-sm text-gray-900 flex items-center">
+                                                <Mail className="w-4 h-4 mr-1" />
+                                                {employee.email}
                                             </div>
-                                            {record.certificate_number && (
-                                                <button
-                                                    onClick={() => router.get(
-                                                        route("training.certificate.download", record)
-                                                    )}
-                                                    className="text-sm text-blue-600 hover:text-blue-900 flex items-center"
-                                                >
-                                                    <Download className="w-3 h-3 mr-1" />
-                                                    Download
-                                                </button>
-                                            )}
-                                        </td>
-                                        <td>
-                                            <div className="text-sm text-gray-900">
-                                                {new Date(record.issue_date).toLocaleDateString('id-ID')}
-                                            </div>
-                                        </td>
-                                        <td>
-                                            <div className="text-sm text-gray-900">
-                                                {new Date(record.expiry_date).toLocaleDateString('id-ID')}
-                                            </div>
-                                            <div className="text-xs text-gray-500">
-                                                {getDaysUntilExpiry(record.expiry_date)} days
-                                            </div>
-                                        </td>
-                                        <td>{getStatusBadge(record)}</td>
-                                        <td>
-                                            <div className="text-sm text-gray-900">
-                                                {record.training_provider || 'N/A'}
-                                            </div>
-                                            {record.cost && (
-                                                <div className="text-xs text-gray-500">
-                                                    {formatCurrency(record.cost)}
+                                            {employee.phone && (
+                                                <div className="text-sm text-gray-500 flex items-center">
+                                                    <Phone className="w-4 h-4 mr-1" />
+                                                    {employee.phone}
                                                 </div>
                                             )}
                                         </td>
+                                        <td>
+                                            <div className="text-sm text-gray-900 flex items-center">
+                                                <Building className="w-4 h-4 mr-1" />
+                                                {employee.department}
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <div className="space-y-1">
+                                                {getComplianceBadge(
+                                                    employee.training_stats
+                                                )}
+                                                <div className="text-xs text-gray-500">
+                                                    {employee.training_stats.total_trainings}{" "}
+                                                    total trainings
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td>{getStatusBadge(employee)}</td>
                                         <td>
                                             <div className="flex items-center space-x-2">
                                                 <Link
-                                                    href={route("training.show", record)}
+                                                    href={route("employees.show", employee)}
                                                     className="text-blue-600 hover:text-blue-900"
                                                     title="View Details"
                                                 >
                                                     <Eye className="w-4 h-4" />
                                                 </Link>
                                                 <Link
-                                                    href={route("training.edit", record)}
+                                                    href={route("employees.edit", employee)}
                                                     className="text-green-600 hover:text-green-900"
-                                                    title="Edit Training"
+                                                    title="Edit Employee"
                                                 >
                                                     <Edit className="w-4 h-4" />
                                                 </Link>
@@ -686,16 +582,19 @@ export default function Index({
                                                     onClick={() => {
                                                         if (
                                                             confirm(
-                                                                "Are you sure you want to delete this training record?"
+                                                                "Are you sure you want to delete this employee?"
                                                             )
                                                         ) {
                                                             router.delete(
-                                                                route("training.destroy", record)
+                                                                route(
+                                                                    "employees.destroy",
+                                                                    employee
+                                                                )
                                                             );
                                                         }
                                                     }}
                                                     className="text-red-600 hover:text-red-900"
-                                                    title="Delete Training"
+                                                    title="Delete Employee"
                                                 >
                                                     <Trash2 className="w-4 h-4" />
                                                 </button>
@@ -708,15 +607,15 @@ export default function Index({
                     </div>
 
                     {/* Pagination */}
-                    {trainingRecords.links && (
+                    {employees.links && (
                         <div className="px-6 py-4 border-t border-gray-200">
                             <div className="flex items-center justify-between">
                                 <div className="text-sm text-gray-700">
-                                    Showing {trainingRecords.from} to {trainingRecords.to} of{" "}
-                                    {trainingRecords.total} results
+                                    Showing {employees.from} to {employees.to} of{" "}
+                                    {employees.total} results
                                 </div>
                                 <div className="flex items-center space-x-2">
-                                    {trainingRecords.links.map((link, index) => (
+                                    {employees.links.map((link, index) => (
                                         <button
                                             key={index}
                                             onClick={() => router.get(link.url)}

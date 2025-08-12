@@ -1,6 +1,5 @@
 <?php
 
-// database/seeders/AviationTrainingTypesSeeder.php
 namespace Database\Seeders;
 
 use Illuminate\Database\Seeder;
@@ -243,50 +242,21 @@ class AviationTrainingTypesSeeder extends Seeder
                     'compliance_level' => 'MEDIUM',
                     'cost' => 1700000,
                 ],
-            ],
-
-            'REGULATORY' => [
                 [
-                    'name' => 'DGCA Regulations Compliance',
-                    'description' => 'Indonesian Civil Aviation Regulations (CASR) compliance training',
-                    'validity_period' => 24,
-                    'is_mandatory' => true,
-                    'compliance_level' => 'CRITICAL',
-                    'provider' => 'Directorate General of Civil Aviation',
-                    'cost' => 1200000,
-                    'notification_days' => 90,
-                ],
-                [
-                    'name' => 'ICAO Standards & Recommended Practices',
-                    'description' => 'International Civil Aviation Organization standards compliance',
+                    'name' => 'Navigation Aids (NAVAID)',
+                    'description' => 'Navigation aids maintenance and calibration procedures',
                     'validity_period' => 36,
                     'is_mandatory' => true,
                     'compliance_level' => 'HIGH',
-                    'cost' => 1500000,
-                ],
-                [
-                    'name' => 'Quality Management System (SMS)',
-                    'description' => 'Safety Management System implementation and compliance',
-                    'validity_period' => 24,
-                    'is_mandatory' => true,
-                    'compliance_level' => 'HIGH',
-                    'cost' => 1800000,
-                ],
-                [
-                    'name' => 'Environmental Compliance',
-                    'description' => 'Airport environmental regulations and waste management',
-                    'validity_period' => 24,
-                    'is_mandatory' => true,
-                    'compliance_level' => 'MEDIUM',
-                    'cost' => 1000000,
+                    'cost' => 2500000,
                 ],
             ],
 
             'MANAGEMENT' => [
                 [
-                    'name' => 'Airport Operations Management',
-                    'description' => 'Comprehensive airport operations management training',
-                    'validity_period' => 36,
+                    'name' => 'Aviation Management',
+                    'description' => 'Airport operations and aviation business management',
+                    'validity_period' => 48,
                     'is_mandatory' => false,
                     'compliance_level' => 'MEDIUM',
                     'cost' => 3000000,

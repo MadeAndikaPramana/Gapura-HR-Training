@@ -2,335 +2,460 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Employee;
+use App\Models\TrainingRecord;
+use App\Models\TrainingType;
+use App\Services\CertificateGenerationService;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
-use App\Models\Employee;
-use App\Models\TrainingType;
-use App\Models\TrainingRecord;
-use App\Models\BackgroundCheck;
-use Illuminate\Support\Facades\Redirect;
+use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\DB;
+use Carbon\Carbon;
 
 class EmployeeController extends Controller
 {
+    protected $certificateService;
+
+    public function __construct(CertificateGenerationService $certificateService)
+    {
+        $this->certificateService = $certificateService;
+    }
+
     /**
-     * Display employees list
+     * Display a listing of employees with training statistics
      */
     public function index(Request $request)
     {
-        $query = Employee::query();
+        $query = Employee::with(['trainingRecords.trainingType']);
 
         // Search functionality
-        if ($request->filled('search')) {
-            $search = $request->get('search');
+        if ($request->has('search') && !empty($request->search)) {
+            $search = $request->search;
             $query->where(function($q) use ($search) {
-                $q->where('nama_lengkap', 'like', "%{$search}%")
+                $q->where('name', 'like', "%{$search}%")
+                  ->orWhere('nik', 'like', "%{$search}%")
                   ->orWhere('nip', 'like', "%{$search}%")
-                  ->orWhere('unit_organisasi', 'like', "%{$search}%")
-                  ->orWhere('jabatan', 'like', "%{$search}%");
+                  ->orWhere('email', 'like', "%{$search}%")
+                  ->orWhere('department', 'like', "%{$search}%")
+                  ->orWhere('position', 'like', "%{$search}%");
             });
         }
 
         // Department filter
-        if ($request->filled('department')) {
-            $query->where('unit_organisasi', $request->get('department'));
+        if ($request->has('department') && $request->department !== 'all') {
+            $query->where('department', $request->department);
         }
 
         // Status filter
-        if ($request->filled('status')) {
-            $query->where('status_kerja', $request->get('status'));
+        if ($request->has('status') && $request->status !== 'all') {
+            $query->where('is_active', $request->status === 'active');
         }
 
-        // Compliance filter
-        if ($request->filled('compliance')) {
-            $compliance = $request->get('compliance');
-            if ($compliance === 'compliant') {
-                $query->compliantEmployees();
-            } elseif ($compliance === 'non_compliant') {
-                $query->needsTraining();
-            } elseif ($compliance === 'expiring_soon') {
-                $query->trainingExpiringSoon();
-            }
+        // Training compliance filter
+        if ($request->has('compliance') && $request->compliance !== 'all') {
+            $query->whereHas('trainingRecords', function($q) use ($request) {
+                if ($request->compliance === 'compliant') {
+                    $q->where('expiry_date', '>', Carbon::now());
+                } elseif ($request->compliance === 'expired') {
+                    $q->where('expiry_date', '<=', Carbon::now());
+                } elseif ($request->compliance === 'expiring') {
+                    $q->whereBetween('expiry_date', [Carbon::now(), Carbon::now()->addDays(30)]);
+                }
+            });
         }
 
-        $employees = $query->withTrainingCompliance()
-                          ->paginate(20)
-                          ->withQueryString();
+        // Sorting
+        $sortField = $request->get('sort', 'name');
+        $sortDirection = $request->get('direction', 'asc');
+
+        if (in_array($sortField, ['name', 'nik', 'nip', 'department', 'position', 'created_at'])) {
+            $query->orderBy($sortField, $sortDirection);
+        }
+
+        // Pagination
+        $perPage = $request->get('per_page', 20);
+        $employees = $query->paginate($perPage);
+
+        // Add training statistics to each employee
+        $employees->getCollection()->transform(function ($employee) {
+            $employee->training_stats = [
+                'total_trainings' => $employee->trainingRecords->count(),
+                'valid_trainings' => $employee->trainingRecords->filter(function($record) {
+                    return $record->expiry_date > Carbon::now();
+                })->count(),
+                'expired_trainings' => $employee->trainingRecords->filter(function($record) {
+                    return $record->expiry_date <= Carbon::now();
+                })->count(),
+                'expiring_soon' => $employee->trainingRecords->filter(function($record) {
+                    return $record->expiry_date <= Carbon::now()->addDays(30) &&
+                           $record->expiry_date > Carbon::now();
+                })->count(),
+            ];
+            return $employee;
+        });
 
         // Get filter options
-        $departments = Employee::select('unit_organisasi')
-                              ->distinct()
-                              ->whereNotNull('unit_organisasi')
-                              ->orderBy('unit_organisasi')
-                              ->pluck('unit_organisasi');
+        $departments = Employee::distinct('department')->pluck('department')->filter();
+
+        // Statistics
+        $stats = [
+            'total_employees' => Employee::count(),
+            'active_employees' => Employee::where('is_active', true)->count(),
+            'total_trainings' => TrainingRecord::count(),
+            'expiring_certificates' => TrainingRecord::where('expiry_date', '<=', Carbon::now()->addDays(30))
+                                                   ->where('expiry_date', '>', Carbon::now())
+                                                   ->count(),
+        ];
 
         return Inertia::render('Employees/Index', [
             'employees' => $employees,
+            'filters' => $request->only(['search', 'department', 'status', 'compliance', 'sort', 'direction']),
             'departments' => $departments,
-            'filters' => $request->only(['search', 'department', 'status', 'compliance']),
-            'statistics' => $this->getEmployeeStatistics(),
+            'stats' => $stats,
+            'title' => 'Employee Management',
+            'subtitle' => 'Kelola data karyawan dan pelatihan mereka'
         ]);
     }
 
     /**
-     * Show employee details
+     * Show the form for creating a new employee
+     */
+    public function create()
+    {
+        $departments = Employee::distinct('department')->pluck('department')->filter();
+
+        return Inertia::render('Employees/Create', [
+            'departments' => $departments,
+            'title' => 'Add New Employee',
+            'subtitle' => 'Tambah karyawan baru ke sistem'
+        ]);
+    }
+
+    /**
+     * Store a newly created employee
+     */
+    public function store(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'name' => 'required|string|max:255',
+            'nik' => 'required|string|max:16|unique:employees,nik',
+            'nip' => 'required|string|max:20|unique:employees,nip',
+            'email' => 'required|email|unique:employees,email',
+            'phone' => 'nullable|string|max:15',
+            'department' => 'required|string|max:100',
+            'position' => 'required|string|max:100',
+            'hire_date' => 'required|date',
+            'birth_date' => 'nullable|date',
+            'address' => 'nullable|string',
+            'is_active' => 'boolean',
+        ]);
+
+        if ($validator->fails()) {
+            return back()->withErrors($validator)->withInput();
+        }
+
+        try {
+            DB::beginTransaction();
+
+            $employee = Employee::create([
+                'name' => $request->name,
+                'nik' => $request->nik,
+                'nip' => $request->nip,
+                'email' => $request->email,
+                'phone' => $request->phone,
+                'department' => $request->department,
+                'position' => $request->position,
+                'hire_date' => $request->hire_date,
+                'birth_date' => $request->birth_date,
+                'address' => $request->address,
+                'is_active' => $request->get('is_active', true),
+            ]);
+
+            DB::commit();
+
+            return redirect()->route('employees.index')
+                           ->with('success', 'Employee created successfully!');
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return back()->withErrors(['error' => 'Failed to create employee: ' . $e->getMessage()])->withInput();
+        }
+    }
+
+    /**
+     * Display the specified employee with training details
      */
     public function show(Employee $employee)
     {
         $employee->load([
-            'trainingRecords.trainingType',
-            'backgroundChecks' => function($query) {
-                $query->latest('check_date');
+            'trainingRecords' => function($query) {
+                $query->with('trainingType')->orderBy('expiry_date', 'desc');
             }
         ]);
 
-        // Get training matrix
-        $trainingMatrix = $employee->getTrainingMatrix();
+        // Calculate training statistics
+        $trainingStats = [
+            'total_trainings' => $employee->trainingRecords->count(),
+            'valid_trainings' => $employee->trainingRecords->filter(function($record) {
+                return $record->expiry_date > Carbon::now();
+            })->count(),
+            'expired_trainings' => $employee->trainingRecords->filter(function($record) {
+                return $record->expiry_date <= Carbon::now();
+            })->count(),
+            'expiring_soon' => $employee->trainingRecords->filter(function($record) {
+                return $record->expiry_date <= Carbon::now()->addDays(30) &&
+                       $record->expiry_date > Carbon::now();
+            })->count(),
+        ];
 
-        // Get training gaps
-        $trainingGaps = $employee->getTrainingGaps();
+        // Get available training types for adding new training
+        $availableTrainingTypes = TrainingType::where('is_active', true)->get();
+
+        // Group trainings by status
+        $groupedTrainings = [
+            'valid' => $employee->trainingRecords->filter(function($record) {
+                return $record->expiry_date > Carbon::now();
+            }),
+            'expiring' => $employee->trainingRecords->filter(function($record) {
+                return $record->expiry_date <= Carbon::now()->addDays(30) &&
+                       $record->expiry_date > Carbon::now();
+            }),
+            'expired' => $employee->trainingRecords->filter(function($record) {
+                return $record->expiry_date <= Carbon::now();
+            }),
+        ];
 
         return Inertia::render('Employees/Show', [
             'employee' => $employee,
-            'trainingMatrix' => $trainingMatrix,
-            'trainingGaps' => $trainingGaps,
-            'complianceStatus' => [
-                'training' => $employee->training_compliance_status,
-                'background_check' => $employee->background_check_status,
-                'percentage' => $employee->training_compliance_percentage,
-            ],
+            'trainingStats' => $trainingStats,
+            'groupedTrainings' => $groupedTrainings,
+            'availableTrainingTypes' => $availableTrainingTypes,
+            'title' => 'Employee Details',
+            'subtitle' => 'Detail karyawan dan riwayat pelatihan'
         ]);
     }
 
     /**
-     * Show create employee form
-     */
-    public function create()
-    {
-        $departments = Employee::select('unit_organisasi')
-                              ->distinct()
-                              ->whereNotNull('unit_organisasi')
-                              ->orderBy('unit_organisasi')
-                              ->pluck('unit_organisasi');
-
-        $jobTitles = Employee::select('jabatan')
-                            ->distinct()
-                            ->whereNotNull('jabatan')
-                            ->orderBy('jabatan')
-                            ->pluck('jabatan');
-
-        return Inertia::render('Employees/Create', [
-            'departments' => $departments,
-            'jobTitles' => $jobTitles,
-        ]);
-    }
-
-    /**
-     * Store new employee
-     */
-    public function store(Request $request)
-    {
-        $validated = $request->validate([
-            'nip' => 'required|string|max:20|unique:employees',
-            'nama_lengkap' => 'required|string|max:255',
-            'jenis_kelamin' => 'required|in:L,P',
-            'tempat_lahir' => 'nullable|string|max:255',
-            'tanggal_lahir' => 'nullable|date',
-            'unit_organisasi' => 'required|string|max:255',
-            'jabatan' => 'required|string|max:255',
-            'status_pegawai' => 'required|in:PEGAWAI TETAP,PKWT,TAD PAKET SDM,TAD PAKET PEKERJAAN',
-            'status_kerja' => 'required|string|max:50',
-            'lokasi_kerja' => 'nullable|string|max:255',
-            'cabang' => 'nullable|string|max:50',
-            'provider' => 'nullable|string|max:255',
-            'handphone' => 'nullable|string|max:20',
-            'email' => 'nullable|email|max:255',
-            'alamat' => 'nullable|string',
-        ]);
-
-        Employee::create($validated);
-
-        return Redirect::route('employees.index')
-                      ->with('success', 'Employee created successfully.');
-    }
-
-    /**
-     * Show edit employee form
+     * Show the form for editing the specified employee
      */
     public function edit(Employee $employee)
     {
-        $departments = Employee::select('unit_organisasi')
-                              ->distinct()
-                              ->whereNotNull('unit_organisasi')
-                              ->orderBy('unit_organisasi')
-                              ->pluck('unit_organisasi');
-
-        $jobTitles = Employee::select('jabatan')
-                            ->distinct()
-                            ->whereNotNull('jabatan')
-                            ->orderBy('jabatan')
-                            ->pluck('jabatan');
+        $departments = Employee::distinct('department')->pluck('department')->filter();
 
         return Inertia::render('Employees/Edit', [
             'employee' => $employee,
             'departments' => $departments,
-            'jobTitles' => $jobTitles,
+            'title' => 'Edit Employee',
+            'subtitle' => 'Edit data karyawan'
         ]);
     }
 
     /**
-     * Update employee
+     * Update the specified employee
      */
     public function update(Request $request, Employee $employee)
     {
-        $validated = $request->validate([
+        $validator = Validator::make($request->all(), [
+            'name' => 'required|string|max:255',
+            'nik' => 'required|string|max:16|unique:employees,nik,' . $employee->id,
             'nip' => 'required|string|max:20|unique:employees,nip,' . $employee->id,
-            'nama_lengkap' => 'required|string|max:255',
-            'jenis_kelamin' => 'required|in:L,P',
-            'tempat_lahir' => 'nullable|string|max:255',
-            'tanggal_lahir' => 'nullable|date',
-            'unit_organisasi' => 'required|string|max:255',
-            'jabatan' => 'required|string|max:255',
-            'status_pegawai' => 'required|in:PEGAWAI TETAP,PKWT,TAD PAKET SDM,TAD PAKET PEKERJAAN',
-            'status_kerja' => 'required|string|max:50',
-            'lokasi_kerja' => 'nullable|string|max:255',
-            'cabang' => 'nullable|string|max:50',
-            'provider' => 'nullable|string|max:255',
-            'handphone' => 'nullable|string|max:20',
-            'email' => 'nullable|email|max:255',
-            'alamat' => 'nullable|string',
+            'email' => 'required|email|unique:employees,email,' . $employee->id,
+            'phone' => 'nullable|string|max:15',
+            'department' => 'required|string|max:100',
+            'position' => 'required|string|max:100',
+            'hire_date' => 'required|date',
+            'birth_date' => 'nullable|date',
+            'address' => 'nullable|string',
+            'is_active' => 'boolean',
         ]);
 
-        $employee->update($validated);
+        if ($validator->fails()) {
+            return back()->withErrors($validator)->withInput();
+        }
 
-        return Redirect::route('employees.show', $employee)
-                      ->with('success', 'Employee updated successfully.');
+        try {
+            DB::beginTransaction();
+
+            $employee->update([
+                'name' => $request->name,
+                'nik' => $request->nik,
+                'nip' => $request->nip,
+                'email' => $request->email,
+                'phone' => $request->phone,
+                'department' => $request->department,
+                'position' => $request->position,
+                'hire_date' => $request->hire_date,
+                'birth_date' => $request->birth_date,
+                'address' => $request->address,
+                'is_active' => $request->get('is_active', true),
+            ]);
+
+            DB::commit();
+
+            return redirect()->route('employees.show', $employee)
+                           ->with('success', 'Employee updated successfully!');
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return back()->withErrors(['error' => 'Failed to update employee: ' . $e->getMessage()])->withInput();
+        }
     }
 
     /**
-     * Delete employee
+     * Remove the specified employee (soft delete)
      */
     public function destroy(Employee $employee)
     {
-        // Check if employee has training records
-        if ($employee->trainingRecords()->count() > 0) {
-            return Redirect::back()
-                          ->with('error', 'Cannot delete employee that has training records.');
+        try {
+            DB::beginTransaction();
+
+            // Check if employee has active trainings
+            $activeTrainings = $employee->trainingRecords()
+                                      ->where('expiry_date', '>', Carbon::now())
+                                      ->count();
+
+            if ($activeTrainings > 0) {
+                return back()->withErrors(['error' => 'Cannot delete employee with active training records. Please expire or remove training records first.']);
+            }
+
+            // Soft delete employee
+            $employee->update(['is_active' => false]);
+            $employee->delete();
+
+            DB::commit();
+
+            return redirect()->route('employees.index')
+                           ->with('success', 'Employee deleted successfully!');
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return back()->withErrors(['error' => 'Failed to delete employee: ' . $e->getMessage()]);
+        }
+    }
+
+    /**
+     * Add training to employee
+     */
+    public function addTraining(Request $request, Employee $employee)
+    {
+        $validator = Validator::make($request->all(), [
+            'training_type_id' => 'required|exists:training_types,id',
+            'issue_date' => 'required|date',
+            'expiry_date' => 'required|date|after:issue_date',
+            'training_provider' => 'nullable|string|max:255',
+            'cost' => 'nullable|numeric|min:0',
+            'notes' => 'nullable|string',
+        ]);
+
+        if ($validator->fails()) {
+            return back()->withErrors($validator)->withInput();
         }
 
-        $employee->delete();
+        try {
+            DB::beginTransaction();
 
-        return Redirect::route('employees.index')
-                      ->with('success', 'Employee deleted successfully.');
+            $trainingType = TrainingType::findOrFail($request->training_type_id);
+
+            $trainingRecord = TrainingRecord::create([
+                'employee_id' => $employee->id,
+                'training_type_id' => $request->training_type_id,
+                'issue_date' => $request->issue_date,
+                'expiry_date' => $request->expiry_date,
+                'completion_status' => 'COMPLETED',
+                'training_provider' => $request->training_provider,
+                'cost' => $request->cost,
+                'notes' => $request->notes,
+            ]);
+
+            // Generate certificate automatically
+            $certificateResult = $this->certificateService->generateCertificate($trainingRecord);
+
+            DB::commit();
+
+            return back()->with('success', 'Training added successfully! Certificate generated: ' . $certificateResult['certificate_number']);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return back()->withErrors(['error' => 'Failed to add training: ' . $e->getMessage()]);
+        }
     }
 
     /**
-     * Get employee statistics
+     * Remove training from employee
      */
-    private function getEmployeeStatistics()
+    public function removeTraining(Employee $employee, TrainingRecord $trainingRecord)
     {
-        $total = Employee::count();
-        $active = Employee::where('status_kerja', 'Aktif')->count();
-        $compliant = Employee::compliantEmployees()->count();
-        $needsTraining = Employee::needsTraining()->count();
-        $expiringSoon = Employee::trainingExpiringSoon()->count();
+        try {
+            if ($trainingRecord->employee_id !== $employee->id) {
+                return back()->withErrors(['error' => 'Training record does not belong to this employee.']);
+            }
 
-        return [
-            'total' => $total,
-            'active' => $active,
-            'compliant' => $compliant,
-            'needsTraining' => $needsTraining,
-            'expiringSoon' => $expiringSoon,
-            'complianceRate' => $total > 0 ? round(($compliant / $total) * 100, 1) : 0,
-        ];
+            $trainingRecord->delete();
+
+            return back()->with('success', 'Training record removed successfully!');
+
+        } catch (\Exception $e) {
+            return back()->withErrors(['error' => 'Failed to remove training: ' . $e->getMessage()]);
+        }
     }
 
     /**
-     * Export employees data
+     * Export employee data
      */
     public function export(Request $request)
     {
-        // This would implement Excel/CSV export functionality
-        // For now, return JSON for API consumption
+        // Implementation for export functionality
+        // This would integrate with Excel export service
 
-        $query = Employee::withTrainingCompliance();
-
-        // Apply same filters as index
-        if ($request->filled('department')) {
-            $query->where('unit_organisasi', $request->get('department'));
-        }
-
-        if ($request->filled('status')) {
-            $query->where('status_kerja', $request->get('status'));
-        }
-
-        $employees = $query->get()->map(function($employee) {
-            return [
-                'nip' => $employee->nip,
-                'nama_lengkap' => $employee->nama_lengkap,
-                'unit_organisasi' => $employee->unit_organisasi,
-                'jabatan' => $employee->jabatan,
-                'status_pegawai' => $employee->status_pegawai,
-                'status_kerja' => $employee->status_kerja,
-                'training_compliance' => $employee->training_compliance_status,
-                'compliance_percentage' => $employee->training_compliance_percentage,
-                'background_check_status' => $employee->background_check_status,
-                'active_trainings' => $employee->activeTrainingRecords()->count(),
-                'expired_trainings' => $employee->expiredTrainingRecords()->count(),
-            ];
-        });
-
-        return response()->json([
-            'data' => $employees,
-            'total' => $employees->count(),
-            'exported_at' => now(),
-        ]);
+        return response()->json(['message' => 'Export functionality to be implemented']);
     }
 
     /**
-     * Get employee training compliance report
+     * Bulk operations
      */
-    public function complianceReport(Employee $employee)
+    public function bulkUpdate(Request $request)
     {
-        $trainingTypes = TrainingType::active()->ordered()->get();
-        $report = [];
+        $validator = Validator::make($request->all(), [
+            'employee_ids' => 'required|array',
+            'employee_ids.*' => 'exists:employees,id',
+            'action' => 'required|in:activate,deactivate,update_department',
+            'department' => 'required_if:action,update_department|string|max:100',
+        ]);
 
-        foreach ($trainingTypes as $trainingType) {
-            $record = $employee->getTrainingRecord($trainingType->code);
-
-            $report[] = [
-                'training_type' => [
-                    'id' => $trainingType->id,
-                    'name' => $trainingType->name,
-                    'code' => $trainingType->code,
-                    'duration_months' => $trainingType->duration_months,
-                ],
-                'record' => $record ? [
-                    'id' => $record->id,
-                    'certificate_number' => $record->certificate_number,
-                    'valid_from' => $record->valid_from,
-                    'valid_until' => $record->valid_until,
-                    'status' => $record->status,
-                    'days_until_expiry' => $record->days_until_expiry,
-                ] : null,
-                'status' => $record ? $record->status_text : 'Not Completed',
-                'is_compliant' => $record && $record->status === 'active',
-            ];
+        if ($validator->fails()) {
+            return back()->withErrors($validator);
         }
 
-        return response()->json([
-            'employee' => [
-                'id' => $employee->id,
-                'nip' => $employee->nip,
-                'nama_lengkap' => $employee->nama_lengkap,
-                'unit_organisasi' => $employee->unit_organisasi,
-            ],
-            'compliance_report' => $report,
-            'overall_compliance' => [
-                'percentage' => $employee->training_compliance_percentage,
-                'status' => $employee->training_compliance_status,
-                'background_check' => $employee->background_check_status,
-            ],
-            'generated_at' => now(),
-        ]);
+        try {
+            DB::beginTransaction();
+
+            $employees = Employee::whereIn('id', $request->employee_ids);
+            $count = $employees->count();
+
+            switch ($request->action) {
+                case 'activate':
+                    $employees->update(['is_active' => true]);
+                    $message = "$count employees activated successfully!";
+                    break;
+
+                case 'deactivate':
+                    $employees->update(['is_active' => false]);
+                    $message = "$count employees deactivated successfully!";
+                    break;
+
+                case 'update_department':
+                    $employees->update(['department' => $request->department]);
+                    $message = "$count employees moved to {$request->department} department!";
+                    break;
+            }
+
+            DB::commit();
+
+            return back()->with('success', $message);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return back()->withErrors(['error' => 'Bulk operation failed: ' . $e->getMessage()]);
+        }
     }
 }

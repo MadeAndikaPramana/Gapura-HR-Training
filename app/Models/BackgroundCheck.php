@@ -9,97 +9,65 @@ use Carbon\Carbon;
 
 class BackgroundCheck extends Model
 {
-    use HasFactory;
+    use HasFactory, SoftDeletes;
 
     protected $fillable = [
-        'employee_nip',
-        'check_date',
+        'employee_id',
         'check_type',
         'status',
-        'valid_until',
-        'notes',
-        'conducted_by',
+        'issue_date',
+        'expiry_date',
+        'authority',
         'reference_number',
-        'documents',
-        'import_batch_id',
-        'imported_at',
+        'notes',
+        'document_path',
     ];
 
     protected $casts = [
-        'check_date' => 'date',
-        'valid_until' => 'date',
-        'imported_at' => 'datetime',
-        'documents' => 'array',
-        'created_at' => 'datetime',
-        'updated_at' => 'datetime',
+        'issue_date' => 'datetime',
+        'expiry_date' => 'datetime',
     ];
 
-    protected $dates = [
-        'check_date',
-        'valid_until',
-        'imported_at',
-        'created_at',
-        'updated_at',
-    ];
-
-    // Check status constants
-    const STATUS_PENDING = 'pending';
-    const STATUS_IN_PROGRESS = 'in_progress';
-    const STATUS_PASSED = 'passed';
-    const STATUS_FAILED = 'failed';
-    const STATUS_EXPIRED = 'expired';
-    const STATUS_REQUIRES_RENEWAL = 'requires_renewal';
-
-    // Check type constants
+    // Constants for check types
     const CHECK_TYPES = [
-        'security_clearance' => 'Security Clearance',
-        'criminal_background' => 'Criminal Background Check',
-        'employment_verification' => 'Employment Verification',
-        'reference_check' => 'Reference Check',
-        'periodic_review' => 'Periodic Review',
+        'SECURITY_CLEARANCE' => 'Security Clearance',
+        'CRIMINAL_BACKGROUND' => 'Criminal Background Check',
+        'MEDICAL_CLEARANCE' => 'Medical Clearance',
+        'REFERENCE_CHECK' => 'Reference Check',
+        'EDUCATION_VERIFICATION' => 'Education Verification',
+    ];
+
+    // Constants for status
+    const STATUSES = [
+        'PENDING' => 'Pending',
+        'IN_PROGRESS' => 'In Progress',
+        'APPROVED' => 'Approved',
+        'REJECTED' => 'Rejected',
+        'EXPIRED' => 'Expired',
+        'SUSPENDED' => 'Suspended',
     ];
 
     // Relationships
     public function employee()
     {
-        return $this->belongsTo(Employee::class, 'employee_nip', 'nip');
+        return $this->belongsTo(Employee::class);
     }
 
     // Scopes
-    public function scopePassed($query)
+    public function scopeValid($query)
     {
-        return $query->where('status', self::STATUS_PASSED);
-    }
-
-    public function scopePending($query)
-    {
-        return $query->where('status', self::STATUS_PENDING);
-    }
-
-    public function scopeFailed($query)
-    {
-        return $query->where('status', self::STATUS_FAILED);
+        return $query->where('expiry_date', '>', Carbon::now())
+                    ->where('status', 'APPROVED');
     }
 
     public function scopeExpired($query)
     {
-        return $query->where('status', self::STATUS_EXPIRED)
-                    ->orWhere('valid_until', '<', Carbon::today());
+        return $query->where('expiry_date', '<=', Carbon::now());
     }
 
-    public function scopeValid($query)
+    public function scopeApproved($query)
     {
-        return $query->where('status', self::STATUS_PASSED)
-                    ->where(function($q) {
-                        $q->whereNull('valid_until')
-                          ->orWhere('valid_until', '>', Carbon::today());
-                    });
-    }
-
-    public function scopeExpiringSoon($query, $days = 30)
-    {
-        $today = Carbon::today();
-        return $query->whereBetween('valid_until', [$today, $today->copy()->addDays($days)]);
+        return $query->where('status', 'APPROVED');
     }
 
     public function scopeByType($query, $type)
@@ -107,90 +75,71 @@ class BackgroundCheck extends Model
         return $query->where('check_type', $type);
     }
 
-    public function scopeByStatus($query, $status)
+    public function scopeByAuthority($query, $authority)
     {
-        return $query->where('status', $status);
+        return $query->where('authority', $authority);
     }
 
     // Accessors
-    public function getStatusTextAttribute()
+    public function getIsValidAttribute()
     {
-        return match($this->status) {
-            self::STATUS_PENDING => 'Pending',
-            self::STATUS_IN_PROGRESS => 'In Progress',
-            self::STATUS_PASSED => 'Passed',
-            self::STATUS_FAILED => 'Failed',
-            self::STATUS_EXPIRED => 'Expired',
-            self::STATUS_REQUIRES_RENEWAL => 'Requires Renewal',
-            default => 'Unknown',
-        };
+        return $this->expiry_date > Carbon::now() && $this->status === 'APPROVED';
     }
 
-    public function getCheckTypeTextAttribute()
+    public function getIsExpiredAttribute()
+    {
+        return $this->expiry_date <= Carbon::now();
+    }
+
+    public function getStatusLabelAttribute()
+    {
+        return self::STATUSES[$this->status] ?? $this->status;
+    }
+
+    public function getCheckTypeLabelAttribute()
     {
         return self::CHECK_TYPES[$this->check_type] ?? $this->check_type;
     }
 
-    public function getIsValidAttribute()
-    {
-        if ($this->status !== self::STATUS_PASSED) {
-            return false;
-        }
-
-        if ($this->valid_until) {
-            return Carbon::parse($this->valid_until)->isFuture();
-        }
-
-        return true;
-    }
-
-    public function getIsExpiringAttribute()
-    {
-        if (!$this->valid_until || $this->status !== self::STATUS_PASSED) {
-            return false;
-        }
-
-        $daysUntilExpiry = Carbon::today()->diffInDays(Carbon::parse($this->valid_until), false);
-        return $daysUntilExpiry >= 0 && $daysUntilExpiry <= 30;
-    }
-
     public function getDaysUntilExpiryAttribute()
     {
-        if (!$this->valid_until) {
-            return null;
+        return Carbon::now()->diffInDays($this->expiry_date, false);
+    }
+
+    // Methods
+    public function isExpiringSoon($days = 30)
+    {
+        return $this->expiry_date <= Carbon::now()->addDays($days) &&
+               $this->expiry_date > Carbon::now();
+    }
+
+    public function getStatusBadgeClass()
+    {
+        switch ($this->status) {
+            case 'APPROVED':
+                return 'badge-gapura-green';
+            case 'PENDING':
+            case 'IN_PROGRESS':
+                return 'badge-gapura-yellow';
+            case 'REJECTED':
+            case 'EXPIRED':
+            case 'SUSPENDED':
+                return 'badge-gapura-red';
+            default:
+                return 'badge-gapura-blue';
         }
-
-        return Carbon::today()->diffInDays(Carbon::parse($this->valid_until), false);
     }
 
-    // Helper methods
-    public function isValid()
+    // Boot method
+    protected static function boot()
     {
-        return $this->is_valid;
-    }
+        parent::boot();
 
-    public function isExpiring($days = 30)
-    {
-        return $this->is_expiring;
-    }
-
-    public function hasDocuments()
-    {
-        return !empty($this->documents);
-    }
-
-    public function getDocumentUrls()
-    {
-        if (!$this->documents) {
-            return [];
-        }
-
-        return collect($this->documents)->map(function ($doc) {
-            return [
-                'filename' => $doc['filename'] ?? 'Unknown',
-                'url' => asset('storage/' . $doc['path']),
-                'path' => $doc['path'],
-            ];
-        })->toArray();
+        static::updating(function ($model) {
+            // Auto-expire if past expiry date
+            if ($model->expiry_date <= Carbon::now() && $model->status === 'APPROVED') {
+                $model->status = 'EXPIRED';
+            }
+        });
     }
 }

@@ -1,10 +1,11 @@
 <?php
-// app/Models/TrainingType.php
+
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Carbon\Carbon;
 
 class TrainingType extends Model
 {
@@ -12,6 +13,7 @@ class TrainingType extends Model
 
     protected $fillable = [
         'name',
+        'code',
         'category',
         'description',
         'validity_period',
@@ -24,40 +26,18 @@ class TrainingType extends Model
         'renewal_required',
         'notification_days',
         'created_by',
-        'updated_by',
+        'sort_order',
     ];
 
     protected $casts = [
-        'validity_period' => 'integer',
         'is_mandatory' => 'boolean',
         'is_active' => 'boolean',
         'renewal_required' => 'boolean',
-        'cost_estimate' => 'decimal:2',
-        'notification_days' => 'integer',
         'requirements' => 'array',
-        'created_at' => 'datetime',
-        'updated_at' => 'datetime',
-        'deleted_at' => 'datetime',
-    ];
-
-    // Training categories constants
-    const CATEGORIES = [
-        'SAFETY' => 'Safety & Security',
-        'OPERATIONAL' => 'Operational',
-        'TECHNICAL' => 'Technical',
-        'REGULATORY' => 'Regulatory Compliance',
-        'MANAGEMENT' => 'Management',
-        'SPECIALIZED' => 'Specialized Skills',
-        'RECURRENT' => 'Recurrent Training',
-    ];
-
-    // Compliance levels
-    const COMPLIANCE_LEVELS = [
-        'CRITICAL' => 'Critical - Must have',
-        'HIGH' => 'High Priority',
-        'MEDIUM' => 'Medium Priority',
-        'LOW' => 'Low Priority',
-        'OPTIONAL' => 'Optional',
+        'validity_period' => 'integer',
+        'notification_days' => 'integer',
+        'cost_estimate' => 'decimal:2',
+        'sort_order' => 'integer',
     ];
 
     // Relationships
@@ -89,68 +69,86 @@ class TrainingType extends Model
         return $query->where('category', $category);
     }
 
-    public function scopeByCriticality($query, $level)
+    public function scopeByComplianceLevel($query, $level)
     {
         return $query->where('compliance_level', $level);
     }
 
     // Accessors
-    public function getCategoryNameAttribute()
+    public function getValidityPeriodInDaysAttribute()
     {
-        return self::CATEGORIES[$this->category] ?? $this->category;
+        return $this->validity_period * 30; // Approximate days
     }
 
-    public function getComplianceLevelNameAttribute()
+    public function getRequirementsListAttribute()
     {
-        return self::COMPLIANCE_LEVELS[$this->compliance_level] ?? $this->compliance_level;
+        return is_array($this->requirements) ? implode(', ', $this->requirements) : $this->requirements;
     }
 
-    public function getActiveRecordsCountAttribute()
+    public function getFormattedCostAttribute()
     {
-        return $this->trainingRecords()->valid()->count();
+        if (!$this->cost_estimate) {
+            return 'N/A';
+        }
+
+        return 'Rp ' . number_format($this->cost_estimate, 0, ',', '.');
     }
 
-    public function getExpiredRecordsCountAttribute()
-    {
-        return $this->trainingRecords()->expired()->count();
-    }
-
-    public function getDueSoonRecordsCountAttribute()
-    {
-        return $this->trainingRecords()->dueSoon($this->notification_days ?? 30)->count();
-    }
-
-    public function getTotalRecordsCountAttribute()
+    // Methods
+    public function getTotalRecordsCount()
     {
         return $this->trainingRecords()->count();
     }
 
-    // Helper methods
+    public function getValidRecordsCount()
+    {
+        return $this->trainingRecords()
+                    ->where('expiry_date', '>', Carbon::now())
+                    ->count();
+    }
+
+    public function getExpiredRecordsCount()
+    {
+        return $this->trainingRecords()
+                    ->where('expiry_date', '<=', Carbon::now())
+                    ->count();
+    }
+
+    public function getExpiringRecordsCount($days = 30)
+    {
+        return $this->trainingRecords()
+                    ->whereBetween('expiry_date', [
+                        Carbon::now(),
+                        Carbon::now()->addDays($days)
+                    ])
+                    ->count();
+    }
+
     public function getComplianceRate()
     {
-        $total = $this->total_records_count;
-        $valid = $this->active_records_count;
+        $total = $this->getTotalRecordsCount();
+        $valid = $this->getValidRecordsCount();
 
         return $total > 0 ? round(($valid / $total) * 100, 2) : 0;
     }
 
-    public function getEmployeesRequiringTraining($departmentFilter = null)
+    public function getEmployeesWithValidTraining()
     {
-        $query = Employee::where('status_kerja', 'Aktif');
-
-        if ($departmentFilter) {
-            $query->where('unit_organisasi', $departmentFilter);
-        }
-
-        // Get employees who don't have this training or have expired certificates
-        return $query->whereDoesntHave('trainingRecords', function ($q) {
-            $q->where('training_type_id', $this->id)->valid();
-        })->get();
+        return $this->employees()
+                    ->wherePivot('expiry_date', '>', Carbon::now())
+                    ->get();
     }
 
-    public function getUpcomingExpirations($days = null)
+    public function getEmployeesWithExpiredTraining()
     {
-        $notificationDays = $days ?? $this->notification_days ?? 30;
+        return $this->employees()
+                    ->wherePivot('expiry_date', '<=', Carbon::now())
+                    ->get();
+    }
+
+    public function getExpiringCertificates($days = null)
+    {
+        $notificationDays = $days ?: $this->notification_days ?? 30;
 
         return $this->trainingRecords()
                     ->dueSoon($notificationDays)
@@ -168,89 +166,5 @@ class TrainingType extends Model
                 $model->notification_days = 30; // Default notification period
             }
         });
-    }
-}
-
-// Update app/Models/Employee.php to add training relationships
-namespace App\Models;
-
-// Add this method to the existing Employee model
-class Employee extends Model
-{
-    // ... existing code ...
-
-    // Training relationships
-    public function trainingRecords()
-    {
-        return $this->hasMany(TrainingRecord::class);
-    }
-
-    public function trainingTypes()
-    {
-        return $this->belongsToMany(TrainingType::class, 'training_records')
-                    ->withPivot('certificate_number', 'issue_date', 'expiry_date', 'completion_status')
-                    ->withTimestamps();
-    }
-
-    // Training-related accessors
-    public function getValidTrainingsCountAttribute()
-    {
-        return $this->trainingRecords()->valid()->count();
-    }
-
-    public function getExpiredTrainingsCountAttribute()
-    {
-        return $this->trainingRecords()->expired()->count();
-    }
-
-    public function getDueSoonTrainingsCountAttribute()
-    {
-        return $this->trainingRecords()->dueSoon()->count();
-    }
-
-    public function getTotalTrainingsAttribute()
-    {
-        return $this->trainingRecords()->count();
-    }
-
-    public function getTrainingComplianceRateAttribute()
-    {
-        $total = $this->total_trainings;
-        $valid = $this->valid_trainings_count;
-
-        return $total > 0 ? round(($valid / $total) * 100, 2) : 0;
-    }
-
-    // Helper methods for training
-    public function hasValidTraining($trainingTypeId)
-    {
-        return $this->trainingRecords()
-                    ->where('training_type_id', $trainingTypeId)
-                    ->valid()
-                    ->exists();
-    }
-
-    public function getLatestTraining($trainingTypeId)
-    {
-        return $this->trainingRecords()
-                    ->where('training_type_id', $trainingTypeId)
-                    ->latest('issue_date')
-                    ->first();
-    }
-
-    public function getExpiringTrainings($days = 30)
-    {
-        return $this->trainingRecords()
-                    ->dueSoon($days)
-                    ->with('trainingType')
-                    ->get();
-    }
-
-    public function getMissingMandatoryTrainings()
-    {
-        $mandatoryTrainingTypes = TrainingType::mandatory()->active()->get();
-        $employeeTrainingTypes = $this->trainingRecords()->valid()->pluck('training_type_id');
-
-        return $mandatoryTrainingTypes->whereNotIn('id', $employeeTrainingTypes);
     }
 }

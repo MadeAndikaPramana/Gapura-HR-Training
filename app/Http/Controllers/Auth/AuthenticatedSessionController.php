@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\LoginRequest;
+use App\Providers\RouteServiceProvider;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -33,7 +34,23 @@ class AuthenticatedSessionController extends Controller
 
         $request->session()->regenerate();
 
-        return redirect()->intended(route('dashboard', absolute: false));
+        // Get user and check if active
+        $user = Auth::user();
+
+        if (!$user->is_active) {
+            Auth::logout();
+
+            return back()->withErrors([
+                'email' => 'Your account has been deactivated. Please contact administrator.',
+            ]);
+        }
+
+        // Log the login activity
+        activity()
+            ->causedBy($user)
+            ->log('User logged in to GAPURA Training System');
+
+        return redirect()->intended(RouteServiceProvider::HOME);
     }
 
     /**
@@ -41,6 +58,13 @@ class AuthenticatedSessionController extends Controller
      */
     public function destroy(Request $request): RedirectResponse
     {
+        // Log the logout activity
+        if (Auth::check()) {
+            activity()
+                ->causedBy(Auth::user())
+                ->log('User logged out from GAPURA Training System');
+        }
+
         Auth::guard('web')->logout();
 
         $request->session()->invalidate();
