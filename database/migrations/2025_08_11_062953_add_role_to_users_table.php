@@ -1,4 +1,3 @@
-// File: database/migrations/2024_01_01_000005_add_role_to_users_table.php
 <?php
 
 use Illuminate\Database\Migrations\Migration;
@@ -7,14 +6,27 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
+    /**
+     * Run the migrations.
+     */
     public function up(): void
     {
         Schema::table('users', function (Blueprint $table) {
-            $table->string('role')->default('user');
-            $table->boolean('is_active')->default(true);
+            // Add role column if it doesn't exist
+            if (!Schema::hasColumn('users', 'role')) {
+                $table->string('role')->default('staff')->after('password');
+            }
+
+            // Add is_active column if it doesn't exist
+            if (!Schema::hasColumn('users', 'is_active')) {
+                $table->boolean('is_active')->default(true)->after('role');
+            }
         });
     }
 
+    /**
+     * Reverse the migrations.
+     */
     public function down(): void
     {
         Schema::table('users', function (Blueprint $table) {

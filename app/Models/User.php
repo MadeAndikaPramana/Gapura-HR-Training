@@ -6,11 +6,10 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
-use Laravel\Sanctum\HasApiTokens;
 
 class User extends Authenticatable
 {
-    use HasApiTokens, HasFactory, Notifiable;
+    use HasFactory, Notifiable;
 
     /**
      * The attributes that are mass assignable.
@@ -36,84 +35,74 @@ class User extends Authenticatable
     ];
 
     /**
-     * The attributes that should be cast.
+     * Get the attributes that should be cast.
      *
-     * @var array<string, string>
+     * @return array<string, string>
      */
-    protected $casts = [
-        'email_verified_at' => 'datetime',
-        'password' => 'hashed',
-        'is_active' => 'boolean',
+    protected function casts(): array
+    {
+        return [
+            'email_verified_at' => 'datetime',
+            'password' => 'hashed',
+            'is_active' => 'boolean',
+        ];
+    }
+
+    /**
+     * The attributes that should have default values.
+     *
+     * @var array<string, mixed>
+     */
+    protected $attributes = [
+        'role' => 'staff',
+        'is_active' => true,
     ];
 
-    // Constants for roles
-    const ROLES = [
-        'super_admin' => 'Super Admin',
-        'admin' => 'Admin',
-        'staff' => 'Staff',
-        'user' => 'User',
-    ];
+    /**
+     * Check if user is admin
+     */
+    public function isAdmin(): bool
+    {
+        return in_array($this->role, ['admin', 'super_admin']);
+    }
 
-    // Scopes
+    /**
+     * Check if user is super admin
+     */
+    public function isSuperAdmin(): bool
+    {
+        return $this->role === 'super_admin';
+    }
+
+    /**
+     * Check if user is staff
+     */
+    public function isStaff(): bool
+    {
+        return $this->role === 'staff';
+    }
+
+    /**
+     * Check if user is active
+     */
+    public function isActive(): bool
+    {
+        return $this->is_active;
+    }
+
+    /**
+     * Scope for active users only
+     */
     public function scopeActive($query)
     {
         return $query->where('is_active', true);
     }
 
-    public function scopeByRole($query, $role)
+    /**
+     * Scope for admin users
+     */
+    public function scopeAdmins($query)
     {
-        return $query->where('role', $role);
-    }
-
-    // Accessors
-    public function getRoleLabelAttribute()
-    {
-        return self::ROLES[$this->role] ?? $this->role;
-    }
-
-    // Helper methods
-    public function isSuperAdmin()
-    {
-        return $this->role === 'super_admin';
-    }
-
-    public function isAdmin()
-    {
-        return in_array($this->role, ['super_admin', 'admin']);
-    }
-
-    public function isStaff()
-    {
-        return in_array($this->role, ['super_admin', 'admin', 'staff']);
-    }
-
-    public function canManageEmployees()
-    {
-        return $this->isAdmin();
-    }
-
-    public function canManageTraining()
-    {
-        return $this->isStaff();
-    }
-
-    public function canViewReports()
-    {
-        return $this->isStaff();
-    }
-
-    public function canExportData()
-    {
-        return $this->isAdmin();
-    }
-
-    public function canImportData()
-    {
-        return $this->isAdmin();
-    }
-
-    public function canManageSettings()
-    {
-        return $this->isSuperAdmin();
+        return $query->whereIn('role', ['admin', 'super_admin']);
     }
 }
