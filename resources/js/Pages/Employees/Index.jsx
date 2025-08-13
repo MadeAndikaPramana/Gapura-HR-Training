@@ -1,287 +1,211 @@
-import React, { useState, useEffect } from "react";
-import { Head, Link, router } from "@inertiajs/react";
-import DashboardLayout from "@/Layouts/DashboardLayout";
+import { useState, useEffect } from 'react';
+import { Head, Link, router } from '@inertiajs/react';
+import DashboardLayout from '@/Layouts/DashboardLayout';
 import {
+    Users,
+    UserPlus,
+    GraduationCap,
     Search,
-    Plus,
     Filter,
-    FileDown,
+    Download,
     Edit,
     Trash2,
-    Users,
-    UserCheck,
-    Building2,
-    ChevronDown,
+    Eye,
     ChevronLeft,
     ChevronRight,
-    ChevronsLeft,
-    ChevronsRight
-} from "lucide-react";
+    Building,
+    UserCheck
+} from 'lucide-react';
 
-export default function EmployeesIndex({
-    employees = { data: [] },
-    filterOptions = {},
-    statistics = {},
-    filters = {},
-    title = "Management Karyawan",
-    subtitle = "Kelola data karyawan PT Gapura Angkasa - Bandar Udara Ngurah Rai"
-}) {
-    const [searchQuery, setSearchQuery] = useState(filters.search || "");
-    const [unitFilter, setUnitFilter] = useState(filters.unit_organisasi || "all");
-    const [statusFilter, setStatusFilter] = useState(filters.status_pegawai || "all");
+export default function EmployeesIndex({ employees, statistics, filterOptions, filters }) {
+    const [search, setSearch] = useState(filters.search || '');
+    const [unitFilter, setUnitFilter] = useState(filters.unit_organisasi || 'all');
+    const [statusFilter, setStatusFilter] = useState(filters.status_pegawai || 'all');
+    const [statusKerjaFilter, setStatusKerjaFilter] = useState(filters.status_kerja || 'all');
     const [showFilters, setShowFilters] = useState(false);
-    const [loading, setLoading] = useState(false);
 
-    // Debounced search
-    const [searchTimeout, setSearchTimeout] = useState(null);
-
+    // Handle search with debounce
     useEffect(() => {
-        if (searchTimeout) {
-            clearTimeout(searchTimeout);
+        const delayedSearch = setTimeout(() => {
+            router.get('/employees', {
+                search,
+                unit_organisasi: unitFilter,
+                status_pegawai: statusFilter,
+                status_kerja: statusKerjaFilter
+            }, {
+                preserveState: true,
+                replace: true
+            });
+        }, 300);
+
+        return () => clearTimeout(delayedSearch);
+    }, [search, unitFilter, statusFilter, statusKerjaFilter]);
+
+    const handleDeleteEmployee = (employee) => {
+        if (confirm(`Apakah Anda yakin ingin menghapus data ${employee.nama_lengkap}?`)) {
+            router.delete(`/employees/${employee.id}`, {
+                onSuccess: () => {
+                    // Refresh will be handled by Inertia
+                }
+            });
         }
-
-        const timeout = setTimeout(() => {
-            if (searchQuery !== filters.search) {
-                handleSearch();
-            }
-        }, 500);
-
-        setSearchTimeout(timeout);
-
-        return () => {
-            if (searchTimeout) {
-                clearTimeout(searchTimeout);
-            }
-        };
-    }, [searchQuery]);
-
-    const handleSearch = () => {
-        setLoading(true);
-        router.get('/employees', {
-            search: searchQuery,
-            unit_organisasi: unitFilter,
-            status_pegawai: statusFilter,
-        }, {
-            preserveState: true,
-            preserveScroll: true,
-            onFinish: () => setLoading(false),
-        });
-    };
-
-    const handleFilterChange = () => {
-        setLoading(true);
-        router.get('/employees', {
-            search: searchQuery,
-            unit_organisasi: unitFilter,
-            status_pegawai: statusFilter,
-        }, {
-            preserveState: true,
-            preserveScroll: true,
-            onFinish: () => setLoading(false),
-        });
     };
 
     const clearFilters = () => {
-        setSearchQuery("");
-        setUnitFilter("all");
-        setStatusFilter("all");
-        setLoading(true);
-        router.get('/employees', {}, {
-            preserveState: true,
-            preserveScroll: true,
-            onFinish: () => setLoading(false),
-        });
-    };
-
-    // Pagination helper
-    const renderPagination = () => {
-        if (!employees.last_page || employees.last_page <= 1) return null;
-
-        return (
-            <div className="flex items-center justify-between px-6 py-4 bg-white border-t border-gray-200">
-                <div className="flex items-center text-sm text-gray-600">
-                    Menampilkan {employees.from || 0} - {employees.to || 0} dari {employees.total || 0} karyawan
-                </div>
-
-                <div className="flex items-center gap-2">
-                    <button
-                        onClick={() => router.get(employees.first_page_url)}
-                        disabled={employees.current_page === 1}
-                        className="p-2 text-gray-400 hover:text-[#439454] disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                        <ChevronsLeft className="w-4 h-4" />
-                    </button>
-
-                    <button
-                        onClick={() => router.get(employees.prev_page_url)}
-                        disabled={!employees.prev_page_url}
-                        className="p-2 text-gray-400 hover:text-[#439454] disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                        <ChevronLeft className="w-4 h-4" />
-                    </button>
-
-                    <span className="px-3 py-1 text-sm font-medium text-gray-700">
-                        {employees.current_page} dari {employees.last_page}
-                    </span>
-
-                    <button
-                        onClick={() => router.get(employees.next_page_url)}
-                        disabled={!employees.next_page_url}
-                        className="p-2 text-gray-400 hover:text-[#439454] disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                        <ChevronRight className="w-4 h-4" />
-                    </button>
-
-                    <button
-                        onClick={() => router.get(employees.last_page_url)}
-                        disabled={employees.current_page === employees.last_page}
-                        className="p-2 text-gray-400 hover:text-[#439454] disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                        <ChevronsRight className="w-4 h-4" />
-                    </button>
-                </div>
-            </div>
-        );
+        setSearch('');
+        setUnitFilter('all');
+        setStatusFilter('all');
+        setStatusKerjaFilter('all');
     };
 
     return (
-        <DashboardLayout>
-            <Head title={title} />
+        <DashboardLayout title="Management Karyawan">
+            <Head title="Management Karyawan" />
 
-            <div className="p-6 space-y-6">
-                {/* Header */}
-                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                        <h1 className="text-2xl font-bold text-gray-900">{title}</h1>
-                        <p className="text-sm text-gray-600 mt-1">{subtitle}</p>
+            <div className="px-4 sm:px-6 lg:px-8">
+                {/* Header Section */}
+                <div className="md:flex md:items-center md:justify-between mb-8">
+                    <div className="min-w-0 flex-1">
+                        <h2 className="text-2xl font-bold leading-7 text-gray-900 sm:truncate sm:text-3xl sm:tracking-tight">
+                            Management Karyawan
+                        </h2>
+                        <p className="mt-1 text-sm text-gray-500">
+                            Kelola data karyawan PT Gapura Angkasa - Bandar Udara Ngurah Rai
+                        </p>
                     </div>
-
-                    <div className="flex items-center gap-3">
+                    <div className="mt-4 flex md:ml-4 md:mt-0 space-x-3">
                         <Link
                             href="/training"
-                            className="flex items-center gap-2 px-4 py-2 border-2 border-[#439454] text-[#439454] rounded-xl hover:bg-[#439454] hover:text-white transition-all duration-300 font-medium"
+                            className="inline-flex items-center px-4 py-2 border border-gapura-green text-sm font-medium rounded-md text-gapura-green bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gapura-green transition-colors"
                         >
-                            <UserCheck className="w-4 h-4" />
+                            <GraduationCap className="mr-2 h-4 w-4" />
                             Training Records
                         </Link>
-
                         <Link
                             href="/employees/create"
-                            className="flex items-center gap-2 px-4 py-2 bg-[#439454] text-white rounded-xl hover:bg-[#358945] transition-all duration-300 shadow-lg font-medium"
+                            className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-gapura-green hover:bg-gapura-green-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gapura-green transition-colors"
                         >
-                            <Plus className="w-4 h-4" />
+                            <UserPlus className="mr-2 h-4 w-4" />
                             Tambah Karyawan
                         </Link>
                     </div>
                 </div>
 
-                {/* Statistics */}
-                <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-                    <div className="bg-gradient-to-br from-blue-50 to-blue-100 p-6 rounded-2xl border border-blue-200">
-                        <div className="flex items-center gap-4">
-                            <div className="p-3 bg-blue-500 text-white rounded-xl">
-                                <Users className="w-6 h-6" />
-                            </div>
-                            <div>
-                                <h3 className="text-lg font-bold text-gray-900">{statistics.totalEmployees || 0}</h3>
-                                <p className="text-sm text-gray-600">Total Karyawan</p>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="bg-gradient-to-br from-green-50 to-green-100 p-6 rounded-2xl border border-green-200">
-                        <div className="flex items-center gap-4">
-                            <div className="p-3 bg-[#439454] text-white rounded-xl">
-                                <UserCheck className="w-6 h-6" />
-                            </div>
-                            <div>
-                                <h3 className="text-lg font-bold text-gray-900">{statistics.activeEmployees || 0}</h3>
-                                <p className="text-sm text-gray-600">Karyawan Aktif</p>
+                {/* Statistics Cards */}
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+                    <div className="bg-white overflow-hidden shadow-sm rounded-lg border border-gray-200">
+                        <div className="p-6">
+                            <div className="flex items-center">
+                                <div className="flex-shrink-0">
+                                    <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+                                        <Users className="h-6 w-6 text-blue-600" />
+                                    </div>
+                                </div>
+                                <div className="ml-4">
+                                    <div className="text-2xl font-bold text-gray-900">
+                                        {statistics.total_employees}
+                                    </div>
+                                    <div className="text-sm text-gray-500">Total Karyawan</div>
+                                </div>
                             </div>
                         </div>
                     </div>
 
-                    <div className="bg-gradient-to-br from-purple-50 to-purple-100 p-6 rounded-2xl border border-purple-200">
-                        <div className="flex items-center gap-4">
-                            <div className="p-3 bg-purple-500 text-white rounded-xl">
-                                <Plus className="w-6 h-6" />
-                            </div>
-                            <div>
-                                <h3 className="text-lg font-bold text-gray-900">{statistics.newEmployees || 0}</h3>
-                                <p className="text-sm text-gray-600">Karyawan Baru</p>
+                    <div className="bg-white overflow-hidden shadow-sm rounded-lg border border-gray-200">
+                        <div className="p-6">
+                            <div className="flex items-center">
+                                <div className="flex-shrink-0">
+                                    <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
+                                        <UserCheck className="h-6 w-6 text-green-600" />
+                                    </div>
+                                </div>
+                                <div className="ml-4">
+                                    <div className="text-2xl font-bold text-gray-900">
+                                        {statistics.active_employees}
+                                    </div>
+                                    <div className="text-sm text-gray-500">Karyawan Aktif</div>
+                                </div>
                             </div>
                         </div>
                     </div>
 
-                    <div className="bg-gradient-to-br from-orange-50 to-orange-100 p-6 rounded-2xl border border-orange-200">
-                        <div className="flex items-center gap-4">
-                            <div className="p-3 bg-orange-500 text-white rounded-xl">
-                                <Building2 className="w-6 h-6" />
+                    <div className="bg-white overflow-hidden shadow-sm rounded-lg border border-gray-200">
+                        <div className="p-6">
+                            <div className="flex items-center">
+                                <div className="flex-shrink-0">
+                                    <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
+                                        <UserPlus className="h-6 w-6 text-purple-600" />
+                                    </div>
+                                </div>
+                                <div className="ml-4">
+                                    <div className="text-2xl font-bold text-gray-900">
+                                        {statistics.new_employees}
+                                    </div>
+                                    <div className="text-sm text-gray-500">Karyawan Baru</div>
+                                </div>
                             </div>
-                            <div>
-                                <h3 className="text-lg font-bold text-gray-900">{statistics.totalUnits || 0}</h3>
-                                <p className="text-sm text-gray-600">Unit Organisasi</p>
+                        </div>
+                    </div>
+
+                    <div className="bg-white overflow-hidden shadow-sm rounded-lg border border-gray-200">
+                        <div className="p-6">
+                            <div className="flex items-center">
+                                <div className="flex-shrink-0">
+                                    <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center">
+                                        <Building className="h-6 w-6 text-orange-600" />
+                                    </div>
+                                </div>
+                                <div className="ml-4">
+                                    <div className="text-2xl font-bold text-gray-900">
+                                        {statistics.total_units}
+                                    </div>
+                                    <div className="text-sm text-gray-500">Unit Organisasi</div>
+                                </div>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                {/* Main Content */}
-                <div className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
-                    {/* Filters Header */}
-                    <div className="p-6 border-b border-gray-100 bg-gray-50">
-                        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                {/* Search and Filters */}
+                <div className="bg-white shadow-sm rounded-lg border border-gray-200 mb-6">
+                    <div className="p-6">
+                        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between space-y-4 lg:space-y-0 lg:space-x-4">
                             {/* Search */}
-                            <div className="relative flex-1 max-w-md">
-                                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                                <input
-                                    type="text"
-                                    placeholder="Cari nama, NIP, atau NIK..."
-                                    value={searchQuery}
-                                    onChange={(e) => setSearchQuery(e.target.value)}
-                                    className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#439454] focus:border-transparent transition-all duration-300"
-                                />
+                            <div className="flex-1 max-w-lg">
+                                <div className="relative">
+                                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                        <Search className="h-5 w-5 text-gray-400" />
+                                    </div>
+                                    <input
+                                        type="text"
+                                        value={search}
+                                        onChange={(e) => setSearch(e.target.value)}
+                                        className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-gapura-green focus:border-gapura-green"
+                                        placeholder="Cari nama, NIP, atau NIK..."
+                                    />
+                                </div>
                             </div>
 
-                            {/* Filter Button */}
-                            <div className="flex items-center gap-3">
+                            {/* Filter Toggle & Export */}
+                            <div className="flex items-center space-x-3">
                                 <button
                                     onClick={() => setShowFilters(!showFilters)}
-                                    className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 transition-all duration-300 font-medium ${
-                                        showFilters
-                                            ? 'border-[#439454] bg-[#439454] text-white'
-                                            : 'border-gray-300 text-gray-700 hover:border-[#439454] hover:text-[#439454]'
-                                    }`}
+                                    className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gapura-green"
                                 >
-                                    <Filter className="w-4 h-4" />
+                                    <Filter className="mr-2 h-4 w-4" />
                                     Filter
-                                    <ChevronDown className={`w-4 h-4 transition-transform duration-300 ${showFilters ? 'rotate-180' : ''}`} />
                                 </button>
-
-                                <button
-                                    onClick={() => window.open('/employees/export')}
-                                    className="flex items-center gap-2 px-4 py-2.5 border-2 border-blue-500 text-blue-500 rounded-xl hover:bg-blue-500 hover:text-white transition-all duration-300 font-medium"
-                                >
-                                    <FileDown className="w-4 h-4" />
+                                <button className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gapura-green">
+                                    <Download className="mr-2 h-4 w-4" />
                                     Export
                                 </button>
-
-                                {(unitFilter !== 'all' || statusFilter !== 'all' || searchQuery) && (
-                                    <button
-                                        onClick={clearFilters}
-                                        className="px-4 py-2.5 text-sm text-gray-600 hover:text-[#439454] transition-colors duration-300"
-                                    >
-                                        Reset Filter
-                                    </button>
-                                )}
                             </div>
                         </div>
 
-                        {/* Extended Filters */}
+                        {/* Filter Options */}
                         {showFilters && (
-                            <div className="mt-4 p-4 bg-white rounded-xl border border-gray-200">
-                                <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-                                    {/* Unit Filter */}
+                            <div className="mt-6 pt-6 border-t border-gray-200">
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 mb-2">
                                             Unit Organisasi
@@ -289,18 +213,15 @@ export default function EmployeesIndex({
                                         <select
                                             value={unitFilter}
                                             onChange={(e) => setUnitFilter(e.target.value)}
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#439454] focus:border-transparent"
+                                            className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-gapura-green focus:border-gapura-green"
                                         >
                                             <option value="all">Semua Unit</option>
-                                            {Object.entries(filterOptions.unitOrganisasi || {}).map(([key, name]) => (
-                                                <option key={key} value={key}>
-                                                    {name}
-                                                </option>
+                                            {filterOptions.unit_organisasi.map(unit => (
+                                                <option key={unit} value={unit}>{unit}</option>
                                             ))}
                                         </select>
                                     </div>
 
-                                    {/* Status Filter */}
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 mb-2">
                                             Status Pegawai
@@ -308,157 +229,197 @@ export default function EmployeesIndex({
                                         <select
                                             value={statusFilter}
                                             onChange={(e) => setStatusFilter(e.target.value)}
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#439454] focus:border-transparent"
+                                            className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-gapura-green focus:border-gapura-green"
                                         >
                                             <option value="all">Semua Status</option>
-                                            {Object.entries(filterOptions.statusPegawai || {}).map(([key, name]) => (
-                                                <option key={key} value={key}>
-                                                    {name}
-                                                </option>
+                                            {filterOptions.status_pegawai.map(status => (
+                                                <option key={status} value={status}>{status}</option>
                                             ))}
                                         </select>
                                     </div>
 
-                                    <div className="flex items-end">
-                                        <button
-                                            onClick={handleFilterChange}
-                                            disabled={loading}
-                                            className="w-full px-4 py-2 bg-[#439454] text-white rounded-lg hover:bg-[#358945] transition-colors duration-300 disabled:opacity-50"
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                                            Status Kerja
+                                        </label>
+                                        <select
+                                            value={statusKerjaFilter}
+                                            onChange={(e) => setStatusKerjaFilter(e.target.value)}
+                                            className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-gapura-green focus:border-gapura-green"
                                         >
-                                            {loading ? 'Memuat...' : 'Terapkan Filter'}
-                                        </button>
+                                            <option value="all">Semua Status Kerja</option>
+                                            {filterOptions.status_kerja.map(status => (
+                                                <option key={status} value={status}>{status}</option>
+                                            ))}
+                                        </select>
                                     </div>
+                                </div>
+                                <div className="mt-4">
+                                    <button
+                                        onClick={clearFilters}
+                                        className="text-sm text-gapura-green hover:text-gapura-green-dark"
+                                    >
+                                        Clear All Filters
+                                    </button>
                                 </div>
                             </div>
                         )}
                     </div>
+                </div>
 
-                    {/* Table Content */}
-                    <div className="overflow-hidden">
-                        {loading ? (
-                            <div className="p-12 text-center">
-                                <div className="inline-block w-8 h-8 border-4 border-[#439454] border-t-transparent rounded-full animate-spin"></div>
-                                <p className="mt-4 text-gray-600">Memuat data karyawan...</p>
-                            </div>
-                        ) : employees.data && employees.data.length > 0 ? (
-                            <div className="overflow-x-auto">
-                                <table className="w-full">
-                                    <thead className="bg-gray-50 border-b border-gray-200">
-                                        <tr>
-                                            <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                                                No
-                                            </th>
-                                            <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                                                Nama Lengkap
-                                            </th>
-                                            <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                                                NIK
-                                            </th>
-                                            <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                                                NIP
-                                            </th>
-                                            <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                                                Unit Organisasi
-                                            </th>
-                                            <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                                                Status
-                                            </th>
-                                            <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                                                Actions
-                                            </th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="bg-white divide-y divide-gray-200">
-                                        {employees.data.map((employee, index) => (
-                                            <tr
-                                                key={employee.id}
-                                                className="hover:bg-gray-50 transition-colors duration-200"
+                {/* Employee Table */}
+                <div className="bg-white shadow-sm rounded-lg border border-gray-200 overflow-hidden">
+                    <div className="overflow-x-auto">
+                        <table className="min-w-full divide-y divide-gray-200">
+                            <thead className="bg-gray-50">
+                                <tr>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        NO
+                                    </th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        NAMA LENGKAP
+                                    </th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        NIK
+                                    </th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        NIP
+                                    </th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        UNIT ORGANISASI
+                                    </th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        STATUS
+                                    </th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        ACTIONS
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody className="bg-white divide-y divide-gray-200">
+                                {employees.data.map((employee, index) => (
+                                    <tr key={employee.id} className="hover:bg-gray-50">
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                            {employees.from + index}
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap">
+                                            <div className="flex items-center">
+                                                <div className="h-8 w-8 bg-gapura-green rounded-full flex items-center justify-center text-white font-semibold text-sm mr-3">
+                                                    {employee.nama_lengkap.charAt(0).toUpperCase()}
+                                                </div>
+                                                <div>
+                                                    <div className="text-sm font-medium text-gray-900">
+                                                        {employee.nama_lengkap}
+                                                    </div>
+                                                    <div className="text-sm text-gray-500">
+                                                        {employee.jabatan}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                            {employee.nik}
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap">
+                                            <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">
+                                                {employee.nip}
+                                            </span>
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                            {employee.unit_organisasi}
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap">
+                                            <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                                                employee.status_kerja === 'Aktif'
+                                                    ? 'bg-green-100 text-green-800'
+                                                    : employee.status_pegawai === 'PKWT'
+                                                    ? 'bg-yellow-100 text-yellow-800'
+                                                    : 'bg-gray-100 text-gray-800'
+                                            }`}>
+                                                {employee.status_pegawai}
+                                            </span>
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
+                                            <Link
+                                                href={`/employees/${employee.id}`}
+                                                className="text-blue-600 hover:text-blue-800 inline-flex items-center"
                                             >
-                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                                    {index + 1}
-                                                </td>
-                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                    <div className="flex items-center">
-                                                        <div className="w-10 h-10 bg-gradient-to-br from-[#439454] to-[#358945] rounded-full flex items-center justify-center text-white font-semibold text-sm">
-                                                            {employee.nama_lengkap?.charAt(0)?.toUpperCase() || 'N'}
-                                                        </div>
-                                                        <div className="ml-3">
-                                                            <div className="text-sm font-semibold text-gray-900">
-                                                                {employee.nama_lengkap}
-                                                            </div>
-                                                            <div className="text-xs text-gray-500">
-                                                                {employee.jabatan}
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                </td>
-                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                    <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-                                                        {employee.nik}
-                                                    </span>
-                                                </td>
-                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                    <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                                                        {employee.nip}
-                                                    </span>
-                                                </td>
-                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                    <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-medium bg-[#439454]/10 text-[#439454]">
-                                                        {employee.unit_organisasi}
-                                                    </span>
-                                                </td>
-                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                    <span className={`inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-medium ${
-                                                        employee.status_pegawai === 'PEGAWAI TETAP'
-                                                            ? 'bg-green-100 text-green-800'
-                                                            : 'bg-yellow-100 text-yellow-800'
-                                                    }`}>
-                                                        {employee.status_pegawai}
-                                                    </span>
-                                                </td>
-                                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                                                    <div className="flex items-center gap-2">
-                                                        <Link
-                                                            href={`/employees/${employee.id}/edit`}
-                                                            className="text-blue-600 hover:text-blue-800 p-1 rounded"
-                                                        >
-                                                            <Edit className="w-4 h-4" />
-                                                        </Link>
-                                                        <button className="text-red-600 hover:text-red-800 p-1 rounded">
-                                                            <Trash2 className="w-4 h-4" />
-                                                        </button>
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                        ) : (
-                            <div className="p-12 text-center">
-                                <Users className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                                <h3 className="text-lg font-medium text-gray-900 mb-2">
-                                    Tidak ada data karyawan
-                                </h3>
-                                <p className="text-gray-600 mb-6">
-                                    {searchQuery || unitFilter !== 'all' || statusFilter !== 'all'
-                                        ? 'Tidak ada karyawan yang sesuai dengan filter yang dipilih.'
-                                        : 'Belum ada data karyawan. Tambahkan karyawan baru untuk memulai.'}
-                                </p>
-
-                                <Link
-                                    href="/employees/create"
-                                    className="inline-flex items-center gap-2 px-6 py-3 bg-[#439454] text-white rounded-xl hover:bg-[#358945] transition-all duration-300 font-medium"
-                                >
-                                    <Plus className="w-4 h-4" />
-                                    Tambah Karyawan
-                                </Link>
-                            </div>
-                        )}
+                                                <Eye className="h-4 w-4" />
+                                            </Link>
+                                            <Link
+                                                href={`/employees/${employee.id}/edit`}
+                                                className="text-gapura-green hover:text-gapura-green-dark inline-flex items-center"
+                                            >
+                                                <Edit className="h-4 w-4" />
+                                            </Link>
+                                            <button
+                                                onClick={() => handleDeleteEmployee(employee)}
+                                                className="text-red-600 hover:text-red-800 inline-flex items-center"
+                                            >
+                                                <Trash2 className="h-4 w-4" />
+                                            </button>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
                     </div>
 
                     {/* Pagination */}
-                    {renderPagination()}
+                    {employees.last_page > 1 && (
+                        <div className="bg-white px-4 py-3 flex items-center justify-between border-t border-gray-200 sm:px-6">
+                            <div className="flex-1 flex justify-between sm:hidden">
+                                {employees.prev_page_url && (
+                                    <Link
+                                        href={employees.prev_page_url}
+                                        className="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
+                                    >
+                                        Previous
+                                    </Link>
+                                )}
+                                {employees.next_page_url && (
+                                    <Link
+                                        href={employees.next_page_url}
+                                        className="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
+                                    >
+                                        Next
+                                    </Link>
+                                )}
+                            </div>
+                            <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
+                                <div>
+                                    <p className="text-sm text-gray-700">
+                                        Showing <span className="font-medium">{employees.from}</span> to{' '}
+                                        <span className="font-medium">{employees.to}</span> of{' '}
+                                        <span className="font-medium">{employees.total}</span> results
+                                    </p>
+                                </div>
+                                <div>
+                                    <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px">
+                                        {employees.prev_page_url && (
+                                            <Link
+                                                href={employees.prev_page_url}
+                                                className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50"
+                                            >
+                                                <ChevronLeft className="h-5 w-5" />
+                                            </Link>
+                                        )}
+                                        <span className="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700">
+                                            Page {employees.current_page} of {employees.last_page}
+                                        </span>
+                                        {employees.next_page_url && (
+                                            <Link
+                                                href={employees.next_page_url}
+                                                className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50"
+                                            >
+                                                <ChevronRight className="h-5 w-5" />
+                                            </Link>
+                                        )}
+                                    </nav>
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>
         </DashboardLayout>

@@ -5,19 +5,15 @@ import {
     Users,
     GraduationCap,
     FileCheck,
-    BarChart3,
     Settings,
     LogOut,
     Menu,
     X,
     Award,
-    Calendar,
     Download,
     Upload,
-    BookOpen,
-    Shield,
     FileText,
-    TrendingUp
+    BookOpen
 } from 'lucide-react';
 
 export default function DashboardLayout({ children, title = "Dashboard" }) {
@@ -32,7 +28,7 @@ export default function DashboardLayout({ children, title = "Dashboard" }) {
         return false;
     };
 
-    // Navigation items - Fixed version
+    // Navigation items - Cleaned up version (removed redundant menus)
     const navigation = [
         {
             name: 'Dashboard',
@@ -44,67 +40,43 @@ export default function DashboardLayout({ children, title = "Dashboard" }) {
             name: 'Employees',
             href: '/employees',
             icon: Users,
-            current: isCurrentRoute('/employees')
+            current: isCurrentRoute('/employees'),
+            description: 'Kelola data karyawan lengkap'
         },
         {
             name: 'Training Records',
             href: '/training',
             icon: GraduationCap,
-            current: isCurrentRoute('/training') && !isCurrentRoute('/training/dashboard') && !isCurrentRoute('/training/analytics')
-        },
-        {
-            name: 'Data Karyawan Training',
-            href: '/training/employees',
-            icon: Users,
-            current: isCurrentRoute('/training/employees')
-        },
-        {
-            name: 'Training Dashboard',
-            href: '/training/dashboard',
-            icon: BarChart3,
-            current: isCurrentRoute('/training/dashboard')
+            current: isCurrentRoute('/training') && !isCurrentRoute('/training/dashboard') && !isCurrentRoute('/training/analytics'),
+            description: 'Data pelatihan dan sertifikasi'
         },
         {
             name: 'Training Types',
             href: '/training-types',
             icon: BookOpen,
-            current: isCurrentRoute('/training-types')
+            current: isCurrentRoute('/training-types'),
+            description: 'Master jenis pelatihan'
         },
         {
             name: 'Certificates',
             href: '/certificates',
             icon: Award,
-            current: isCurrentRoute('/certificates')
-        },
-        {
-            name: 'Background Checks',
-            href: '/background-checks',
-            icon: Shield,
-            current: isCurrentRoute('/background-checks')
-        },
-        {
-            name: 'Schedules',
-            href: '/schedules',
-            icon: Calendar,
-            current: isCurrentRoute('/schedules')
-        },
-        {
-            name: 'Analytics',
-            href: '/training/analytics',
-            icon: TrendingUp,
-            current: isCurrentRoute('/training/analytics')
+            current: isCurrentRoute('/certificates'),
+            description: 'Manajemen sertifikat'
         },
         {
             name: 'Reports',
             href: '/training/reports',
             icon: FileText,
-            current: isCurrentRoute('/training/reports')
+            current: isCurrentRoute('/training/reports'),
+            description: 'Laporan dan analisis'
         },
         {
             name: 'Import/Export',
             href: '/import-export',
             icon: Upload,
-            current: isCurrentRoute('/import-export')
+            current: isCurrentRoute('/import-export'),
+            description: 'Import/Export data'
         }
     ];
 
@@ -152,25 +124,24 @@ export default function DashboardLayout({ children, title = "Dashboard" }) {
                     <div className="sticky top-0 z-10 flex-shrink-0 flex h-16 bg-white shadow border-b border-gray-200">
                         <button
                             type="button"
-                            className="px-4 border-r border-gray-200 text-gray-500 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-[#439454] md:hidden"
+                            className="px-4 border-r border-gray-200 text-gray-500 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-indigo-500 md:hidden"
                             onClick={() => setSidebarOpen(true)}
                         >
                             <Menu className="h-6 w-6" />
                         </button>
                         <div className="flex-1 px-4 flex justify-between items-center">
-                            <div>
+                            <div className="flex-1 flex">
                                 <h1 className="text-xl font-semibold text-gray-900">{title}</h1>
                             </div>
                             <div className="ml-4 flex items-center md:ml-6">
-                                {/* Profile dropdown */}
-                                <div className="ml-3 relative">
-                                    <div className="flex items-center text-sm rounded-full focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#439454]">
-                                        <div className="h-8 w-8 rounded-full bg-[#439454] flex items-center justify-center">
-                                            <span className="text-sm font-medium text-white">
-                                                {auth.user.name.charAt(0).toUpperCase()}
-                                            </span>
+                                <div className="flex items-center space-x-4">
+                                    <div className="flex items-center space-x-2">
+                                        <div className="w-8 h-8 bg-gapura-green rounded-full flex items-center justify-center text-white font-semibold text-sm">
+                                            {auth.user.name.charAt(0).toUpperCase()}
                                         </div>
-                                        <span className="ml-3 text-gray-700 text-sm font-medium">{auth.user.name}</span>
+                                        <span className="text-sm font-medium text-gray-700 hidden sm:block">
+                                            {auth.user.name}
+                                        </span>
                                     </div>
                                 </div>
                             </div>
@@ -179,9 +150,7 @@ export default function DashboardLayout({ children, title = "Dashboard" }) {
 
                     <main className="flex-1 relative overflow-y-auto focus:outline-none">
                         <div className="py-6">
-                            <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8">
-                                {children}
-                            </div>
+                            {children}
                         </div>
                     </main>
                 </div>
@@ -190,76 +159,80 @@ export default function DashboardLayout({ children, title = "Dashboard" }) {
     );
 }
 
-// Sidebar content component - Fixed version
+// Komponen sidebar content
 function SidebarContent({ navigation, userNavigation, auth }) {
     return (
-        <div className="flex flex-col h-0 flex-1 border-r border-gray-200 bg-white">
-            {/* Logo and brand */}
+        <div className="flex-1 flex flex-col min-h-0 bg-white border-r border-gray-200">
+            {/* Logo */}
             <div className="flex-1 flex flex-col pt-5 pb-4 overflow-y-auto">
-                <div className="flex items-center flex-shrink-0 px-4">
-                    <div className="flex items-center">
-                        <div className="flex-shrink-0">
-                            <div className="h-10 w-10 rounded-lg bg-[#439454] flex items-center justify-center">
-                                <GraduationCap className="h-6 w-6 text-white" />
-                            </div>
+                <div className="flex items-center flex-shrink-0 px-4 mb-8">
+                    <div className="flex items-center space-x-3">
+                        <div className="w-10 h-10 bg-gapura-green rounded-lg flex items-center justify-center">
+                            <span className="text-white font-bold text-lg">G</span>
                         </div>
-                        <div className="ml-3">
-                            <p className="text-sm font-bold text-gray-900">GAPURA ANGKASA</p>
-                            <p className="text-xs text-gray-500">Training System</p>
+                        <div>
+                            <h2 className="text-lg font-bold text-gray-900">GAPURA ANGKASA</h2>
+                            <p className="text-sm text-gray-500">Training System</p>
                         </div>
                     </div>
                 </div>
 
                 {/* Navigation */}
-                <nav className="mt-8 flex-1 px-2 space-y-1">
+                <nav className="flex-1 px-2 space-y-1">
                     {navigation.map((item) => {
                         const Icon = item.icon;
                         return (
                             <Link
                                 key={item.name}
                                 href={item.href}
-                                className={`${
+                                className={`group flex items-center px-2 py-3 text-sm font-medium rounded-md transition-colors duration-200 ${
                                     item.current
-                                        ? 'bg-[#439454] text-white'
-                                        : 'text-gray-700 hover:bg-gray-100 hover:text-[#439454]'
-                                } group flex items-center px-2 py-2 text-sm font-medium rounded-md transition-colors duration-200`}
+                                        ? 'bg-gapura-green text-white'
+                                        : 'text-gray-700 hover:bg-gray-100 hover:text-gapura-green'
+                                }`}
                             >
                                 <Icon
-                                    className={`${
-                                        item.current ? 'text-white' : 'text-gray-400 group-hover:text-[#439454]'
-                                    } mr-3 flex-shrink-0 h-5 w-5`}
+                                    className={`mr-3 flex-shrink-0 h-5 w-5 ${
+                                        item.current ? 'text-white' : 'text-gray-400 group-hover:text-gapura-green'
+                                    }`}
                                 />
-                                {item.name}
+                                <div className="flex-1">
+                                    <div className="font-medium">{item.name}</div>
+                                    {item.description && (
+                                        <div className={`text-xs mt-0.5 ${
+                                            item.current ? 'text-white/80' : 'text-gray-500'
+                                        }`}>
+                                            {item.description}
+                                        </div>
+                                    )}
+                                </div>
                             </Link>
                         );
                     })}
                 </nav>
             </div>
 
-            {/* User info and logout */}
-            <div className="flex-shrink-0 flex border-t border-gray-200 p-4">
-                <div className="flex items-center w-full">
-                    <div className="flex-shrink-0">
-                        <div className="h-8 w-8 rounded-full bg-[#439454] flex items-center justify-center">
-                            <span className="text-sm font-medium text-white">
-                                {auth.user.name.charAt(0).toUpperCase()}
-                            </span>
-                        </div>
+            {/* User info */}
+            <div className="flex-shrink-0 border-t border-gray-200 p-4">
+                <div className="flex items-center space-x-3">
+                    <div className="w-8 h-8 bg-gapura-green rounded-full flex items-center justify-center text-white font-semibold text-sm">
+                        {auth.user.name.charAt(0).toUpperCase()}
                     </div>
-                    <div className="ml-3 flex-1">
-                        <p className="text-sm font-medium text-gray-900">{auth.user.name}</p>
-                        <p className="text-xs text-gray-500">{auth.user.email}</p>
+                    <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-900 truncate">
+                            {auth.user.name}
+                        </p>
+                        <p className="text-xs text-gray-500 truncate">
+                            {auth.user.email}
+                        </p>
                     </div>
-                    <div className="ml-3">
-                        <Link
-                            href="/logout"
-                            method="post"
-                            as="button"
-                            className="flex-shrink-0 p-1 text-gray-400 hover:text-red-500 transition-colors duration-200"
-                        >
-                            <LogOut className="h-5 w-5" />
-                        </Link>
-                    </div>
+                    <Link
+                        href="/logout"
+                        method="post"
+                        className="text-gray-400 hover:text-gray-600 transition-colors"
+                    >
+                        <LogOut className="h-5 w-5" />
+                    </Link>
                 </div>
             </div>
         </div>
