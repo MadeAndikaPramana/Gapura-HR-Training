@@ -148,29 +148,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
               ->name('compliance.report');
         Route::get('export', [TrainingTypeController::class, 'export'])->name('export');
     });
-
-    // ========================================================================
-    // CERTIFICATES MANAGEMENT
-    // ========================================================================
-
-    Route::prefix('certificates')->name('certificates.')->group(function () {
-        Route::get('/', [CertificateController::class, 'index'])->name('index');
-        Route::get('expiring', [CertificateController::class, 'expiring'])->name('expiring');
-        Route::get('expired', [CertificateController::class, 'expired'])->name('expired');
-        Route::get('valid', [CertificateController::class, 'valid'])->name('valid');
-
-        // Certificate Operations
-        Route::post('bulk-renew', [CertificateController::class, 'bulkRenew'])->name('bulk.renew');
-        Route::post('bulk-generate', [CertificateController::class, 'bulkGenerate'])->name('bulk.generate');
-        Route::get('{certificate}/download', [CertificateController::class, 'download'])->name('download');
-        Route::get('{certificate}/verify', [CertificateController::class, 'verify'])->name('verify');
-
-        // Export Operations
-        Route::get('export', [CertificateController::class, 'export'])->name('export');
-        Route::post('export-expiring', [CertificateController::class, 'exportExpiring'])->name('export.expiring');
-        Route::post('export-expired', [CertificateController::class, 'exportExpired'])->name('export.expired');
-    });
-
     // ========================================================================
     // BACKGROUND CHECKS MANAGEMENT
     // ========================================================================
@@ -243,134 +220,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
         });
     });
 
-    // ========================================================================
-    // IMPORT/EXPORT OPERATIONS
-    // ========================================================================
-
-    Route::prefix('import-export')->name('import-export.')->group(function () {
-
-        // Import/Export Dashboard
-        Route::get('/', [ImportController::class, 'index'])->name('index');
-
-        // Import Operations
-        Route::post('import-employees', [ImportController::class, 'importEmployees'])->name('import.employees');
-        Route::post('import-training-records', [ImportController::class, 'importTrainingRecords'])->name('import.training-records');
-        Route::post('import-training-types', [ImportController::class, 'importTrainingTypes'])->name('import.training-types');
-
-        // Template Downloads
-        Route::get('template/employees', [ImportController::class, 'employeeTemplate'])->name('template.employees');
-        Route::get('template/training-records', [ImportController::class, 'trainingRecordsTemplate'])->name('template.training-records');
-        Route::get('template/training-types', [ImportController::class, 'trainingTypesTemplate'])->name('template.training-types');
-
-        // Export Operations
-        Route::get('export/all-data', [ExportController::class, 'exportAllData'])->name('export.all-data');
-        Route::get('export/employees', [ExportController::class, 'exportEmployees'])->name('export.employees');
-        Route::get('export/training-records', [ExportController::class, 'exportTrainingRecords'])->name('export.training-records');
-        Route::get('export/compliance-report', [ExportController::class, 'exportComplianceReport'])->name('export.compliance-report');
-
-        // Validation & Preview
-        Route::post('validate-import', [ImportController::class, 'validateImport'])->name('validate');
-        Route::post('preview-import', [ImportController::class, 'previewImport'])->name('preview');
-    });
-
-    // ========================================================================
-    // NOTIFICATION MANAGEMENT
-    // ========================================================================
-
-    Route::prefix('notifications')->name('notifications.')->group(function () {
-
-        // Notification Dashboard
-        Route::get('/', [NotificationController::class, 'index'])->name('index');
-        Route::get('settings', [NotificationController::class, 'settings'])->name('settings');
-
-        // Manual Notification Operations
-        Route::post('send-expiry-alerts', [NotificationController::class, 'sendExpiryAlerts'])->name('send.expiry');
-        Route::post('send-compliance-reminders', [NotificationController::class, 'sendComplianceReminders'])->name('send.compliance');
-        Route::post('send-custom', [NotificationController::class, 'sendCustom'])->name('send.custom');
-        Route::post('send-daily-digest', [NotificationController::class, 'sendDailyDigest'])->name('send.digest');
-
-        // Notification History & Tracking
-        Route::get('history', [NotificationController::class, 'history'])->name('history');
-        Route::get('statistics', [NotificationController::class, 'statistics'])->name('statistics');
-
-        // Notification Preferences
-        Route::post('preferences', [NotificationController::class, 'updatePreferences'])->name('preferences.update');
-        Route::get('preferences', [NotificationController::class, 'getPreferences'])->name('preferences.get');
-    });
-
-    // ========================================================================
-    // SYSTEM SETTINGS & CONFIGURATION
-    // ========================================================================
-
-    Route::prefix('settings')->name('settings.')->group(function () {
-
-        // System Settings
-        Route::get('/', [SettingsController::class, 'index'])->name('index');
-        Route::post('update', [SettingsController::class, 'update'])->name('update');
-
-        // User Management
-        Route::get('users', [SettingsController::class, 'users'])->name('users');
-        Route::post('users', [SettingsController::class, 'createUser'])->name('users.create');
-        Route::put('users/{user}', [SettingsController::class, 'updateUser'])->name('users.update');
-        Route::delete('users/{user}', [SettingsController::class, 'deleteUser'])->name('users.delete');
-
-        // System Maintenance
-        Route::post('clear-cache', [SettingsController::class, 'clearCache'])->name('clear-cache');
-        Route::post('regenerate-certificates', [SettingsController::class, 'regenerateCertificates'])->name('regenerate-certificates');
-        Route::get('system-info', [SettingsController::class, 'systemInfo'])->name('system-info');
-
-        // Backup & Restore
-        Route::post('backup', [SettingsController::class, 'backup'])->name('backup');
-        Route::post('restore', [SettingsController::class, 'restore'])->name('restore');
-    });
-
-    // ========================================================================
-    // API ROUTES FOR FRONTEND
-    // ========================================================================
-
-    Route::prefix('api')->name('api.')->group(function () {
-
-        // Search & Autocomplete
-        Route::get('search/employees', [ApiController::class, 'searchEmployees'])->name('search.employees');
-        Route::get('search/training-types', [ApiController::class, 'searchTrainingTypes'])->name('search.training-types');
-        Route::get('search/certificates', [ApiController::class, 'searchCertificates'])->name('search.certificates');
-
-        // Quick Stats
-        Route::get('stats/dashboard', [ApiController::class, 'dashboardStats'])->name('stats.dashboard');
-        Route::get('stats/employee/{employee}', [ApiController::class, 'employeeStats'])->name('stats.employee');
-        Route::get('stats/department/{department}', [ApiController::class, 'departmentStats'])->name('stats.department');
-
-        // Validation
-        Route::post('validate/employee', [ApiController::class, 'validateEmployee'])->name('validate.employee');
-        Route::post('validate/training-record', [ApiController::class, 'validateTrainingRecord'])->name('validate.training-record');
-        Route::get('validate/certificate/{certificateNumber}', [ApiController::class, 'validateCertificate'])->name('validate.certificate');
-
-        // Data Lists
-        Route::get('departments', [ApiController::class, 'departments'])->name('departments');
-        Route::get('positions', [ApiController::class, 'positions'])->name('positions');
-        Route::get('training-providers', [ApiController::class, 'trainingProviders'])->name('training-providers');
-    });
-
-    // ========================================================================
-    // QUICK ACTIONS & SHORTCUTS
-    // ========================================================================
-
-    Route::prefix('quick')->name('quick.')->group(function () {
-
-        // Quick Employee Actions
-        Route::post('add-employee', [QuickActionsController::class, 'addEmployee'])->name('add-employee');
-        Route::post('add-training', [QuickActionsController::class, 'addTraining'])->name('add-training');
-        Route::post('renew-certificate', [QuickActionsController::class, 'renewCertificate'])->name('renew-certificate');
-
-        // Quick Bulk Actions
-        Route::post('bulk-assign-training', [QuickActionsController::class, 'bulkAssignTraining'])->name('bulk-assign-training');
-        Route::post('bulk-extend-certificates', [QuickActionsController::class, 'bulkExtendCertificates'])->name('bulk-extend-certificates');
-
-        // Emergency Actions
-        Route::post('emergency-notification', [QuickActionsController::class, 'emergencyNotification'])->name('emergency-notification');
-        Route::post('suspend-employee', [QuickActionsController::class, 'suspendEmployee'])->name('suspend-employee');
-    });
-
      Route::prefix('training')->name('training.')->group(function () {
 
         // Main pages
@@ -422,7 +271,6 @@ Route::middleware('auth')->group(function () {
 // ============================================================================
 
 Route::prefix('verify')->name('verify.')->group(function () {
-    Route::get('certificate/{certificateNumber}', [CertificateController::class, 'publicVerify'])->name('certificate');
     Route::get('employee/{nik}', [EmployeeController::class, 'publicProfile'])->name('employee');
 });
 

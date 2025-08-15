@@ -5,265 +5,282 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Carbon\Carbon;
+use Illuminate\Database\Eloquent\Builder;
 
 class Employee extends Model
 {
     use HasFactory;
 
     /**
-     * The attributes that are mass assignable.
-     *
-     * @var array<int, string>
+     * UPDATED FOR MPGA: Field mapping sesuai Excel structure
+     * - NAMA -> nama_lengkap
+     * - NIPP -> nip
+     * - Dept/Unit -> unit_organisasi
+     * - Sheet name -> department
+     */
+
+    protected $table = 'employees';
+
+    /**
+     * MPGA PRIMARY KEY: Gunakan auto-increment ID, tapi keep NIK unique
+     * Berubah dari NIK primary key ke standard Laravel ID untuk compatibility
+     */
+    protected $primaryKey = 'id';
+    public $incrementing = true;
+    protected $keyType = 'int';
+
+    /**
+     * UPDATED FILLABLE: Field sesuai MPGA Excel + existing fields
      */
     protected $fillable = [
-        'nama_lengkap',
-        'nip',
-        'nik',
-        'unit_organisasi',
-        'jabatan',
-        'status_kerja',
-        'tanggal_masuk',
-        'email',
-        'handphone',
-        'alamat',
+        // MPGA Core Fields (dari Excel)
+        'nip',              // NIPP dari Excel - REQUIRED
+        'nama_lengkap',     // NAMA dari Excel - REQUIRED
+        'unit_organisasi',  // Dept/Unit dari Excel - REQUIRED
+        'department',       // Sheet name (DEDICATED, LOADING, etc.) - REQUIRED
+        'unit_kerja',
+
+        // Identity fields
+        'nik',              // NIK - OPTIONAL, bisa auto-generate
+
+        // Contact & Personal Info
+        'jenis_kelamin',
         'tempat_lahir',
         'tanggal_lahir',
+        'usia',
+        'kota_domisili',
+        'alamat',
+        'handphone',
+        'email',
+
+        // Work Information
+        'lokasi_kerja',
+        'cabang',
+        'status_pegawai',
+        'status_kerja',
+        'provider',
+
+        // Organizational Structure
+        'kode_organisasi',
+        'nama_organisasi',
+        'nama_jabatan',
+        'jabatan',
+        'kelompok_jabatan',
+        'unit_kerja_kontrak',
+
+        // Employment Dates
+        'tmt_mulai_kerja',
+        'tmt_mulai_jabatan',
+        'tmt_berakhir_jabatan',
+        'tmt_berakhir_kerja',
+        'masa_kerja_bulan',
+        'masa_kerja_tahun',
+
+        // Education
+        'pendidikan',
+        'pendidikan_terakhir',
+        'instansi_pendidikan',
+        'jurusan',
+        'remarks_pendidikan',
+        'tahun_lulus',
+
+        // Equipment & Benefits
+        'jenis_sepatu',
+        'ukuran_sepatu',
+        'seragam',
+        'no_bpjs_kesehatan',
+        'no_bpjs_ketenagakerjaan',
+        'grade',
+        'kategori_karyawan',
+        'tmt_pensiun',
+
+        // Physical Data
+        'weight',
+        'height',
+
+        // System Fields
+        'organization_id',
+        'status'
     ];
 
     /**
-     * The attributes that should be cast.
-     *
-     * @var array<string, string>
+     * CAST ATTRIBUTES
      */
     protected $casts = [
-        'tanggal_masuk' => 'date',
+        'tmt_mulai_kerja' => 'date',
+        'tmt_mulai_jabatan' => 'date',
+        'tmt_berakhir_jabatan' => 'date',
+        'tmt_berakhir_kerja' => 'date',
         'tanggal_lahir' => 'date',
+        'tmt_pensiun' => 'date',
+        'tahun_lulus' => 'integer',
+        'usia' => 'integer',
+        'weight' => 'integer',
+        'height' => 'integer',
+        'masa_kerja_bulan' => 'integer',
+        'masa_kerja_tahun' => 'integer',
     ];
 
     /**
-     * Default attributes
-     *
-     * @var array<string, mixed>
+     * MPGA CONSTANTS: Department options dari Excel sheets
      */
-    protected $attributes = [
-        'status_kerja' => 'Aktif',
-        'unit_organisasi' => 'GAPURA ANGKASA',
-        'jabatan' => 'Staff',
+    const MPGA_DEPARTMENTS = [
+        'DEDICATED',
+        'LOADING',
+        'RAMP',
+        'LOCO',
+        'ULD',
+        'LOST & FOUND',
+        'CARGO',
+        'ARRIVAL',
+        'GSE OPERATOR',
+        'FLOP',
+        'AVSEC',
+        'PORTER'
     ];
 
-    // =========================================================================
-    // RELATIONSHIPS
-    // =========================================================================
+    const STATUS_PEGAWAI_OPTIONS = [
+        'PEGAWAI TETAP',
+        'PKWT',
+        'TAD PAKET SDM',
+        'TAD PAKET PEKERJAAN'
+    ];
 
     /**
-     * Get the training records for the employee
+     * MPGA SCOPES: Query helpers untuk MPGA data
+     */
+    public function scopeByDepartment($query, $department)
+    {
+        return $query->where('department', $department);
+    }
+
+    public function scopeByUnit($query, $unit)
+    {
+        return $query->where('unit_organisasi', $unit);
+    }
+
+    public function scopeActive($query)
+    {
+        return $query->where('status_kerja', 'Aktif')
+                    ->where('status', 'active');
+    }
+
+    public function scopeMpgaEmployees($query)
+    {
+        return $query->whereIn('department', self::MPGA_DEPARTMENTS);
+    }
+
+    /**
+     * RELATIONSHIPS: Training system relationships
      */
     public function trainingRecords()
     {
         return $this->hasMany(TrainingRecord::class);
     }
 
-    /**
-     * Get the background checks for the employee
-     */
     public function backgroundChecks()
     {
-        return $this->hasMany(BackgroundCheck::class);
+        return $this->hasMany(BackgroundCheck::class, 'employee_nip', 'nip');
     }
 
-    // =========================================================================
-    // SCOPES
-    // =========================================================================
-
     /**
-     * Scope: Active employees only
+     * ACCESSORS: Computed properties
      */
-    public function scopeActive($query)
+    public function getFullIdentityAttribute()
     {
-        return $query->where('status_kerja', 'Aktif');
+        return "{$this->nama_lengkap} (NIP: {$this->nip})";
+    }
+
+    public function getDepartmentUnitAttribute()
+    {
+        return "{$this->department} - {$this->unit_organisasi}";
     }
 
     /**
-     * Scope: Employees by department
-     */
-    public function scopeByDepartment($query, $department)
-    {
-        return $query->where('unit_organisasi', $department);
-    }
-
-    /**
-     * Scope: Search employees
-     */
-    public function scopeSearch($query, $search)
-    {
-        return $query->where(function($q) use ($search) {
-            $q->where('nama_lengkap', 'like', "%{$search}%")
-              ->orWhere('nip', 'like', "%{$search}%")
-              ->orWhere('nik', 'like', "%{$search}%");
-        });
-    }
-
-    // =========================================================================
-    // ACCESSORS & MUTATORS
-    // =========================================================================
-
-    /**
-     * Get the employee's full display name
-     */
-    public function getDisplayNameAttribute()
-    {
-        return $this->nama_lengkap . ' (' . $this->nip . ')';
-    }
-
-    /**
-     * Get the employee's work duration in years
-     */
-    public function getWorkDurationAttribute()
-    {
-        if (!$this->tanggal_masuk) {
-            return 0;
-        }
-
-        return Carbon::parse($this->tanggal_masuk)->diffInYears(Carbon::now());
-    }
-
-    /**
-     * Format NIP automatically
+     * MUTATORS: Auto-processing
      */
     public function setNipAttribute($value)
     {
-        $this->attributes['nip'] = strtoupper(trim($value));
+        $this->attributes['nip'] = str_pad($value, 7, '0', STR_PAD_LEFT);
     }
 
-    /**
-     * Format NIK automatically
-     */
-    public function setNikAttribute($value)
-    {
-        $this->attributes['nik'] = trim($value);
-    }
-
-    /**
-     * Format nama_lengkap automatically
-     */
     public function setNamaLengkapAttribute($value)
     {
-        $this->attributes['nama_lengkap'] = ucwords(strtolower(trim($value)));
-    }
-
-    // =========================================================================
-    // TRAINING RELATED METHODS (Simple)
-    // =========================================================================
-
-    /**
-     * Get count of valid training records
-     */
-    public function getValidTrainingsCountAttribute()
-    {
-        return $this->trainingRecords()
-                   ->where('expiry_date', '>', Carbon::now())
-                   ->count();
+        $this->attributes['nama_lengkap'] = strtoupper(trim($value));
     }
 
     /**
-     * Get count of expired training records
+     * MPGA HELPER METHODS
      */
-    public function getExpiredTrainingsCountAttribute()
+
+    /**
+     * Generate NIK if not provided
+     */
+    public static function generateNik($nip, $department = null)
     {
-        return $this->trainingRecords()
-                   ->where('expiry_date', '<=', Carbon::now())
-                   ->count();
+        $prefix = $department ? substr($department, 0, 3) : 'EMP';
+        return strtoupper($prefix) . str_pad($nip, 6, '0', STR_PAD_LEFT);
     }
 
     /**
-     * Get count of total training records
+     * Get department statistics
      */
-    public function getTotalTrainingsCountAttribute()
+    public static function getDepartmentStats()
     {
-        return $this->trainingRecords()->count();
+        return self::selectRaw('department, COUNT(*) as total')
+                  ->whereIn('department', self::MPGA_DEPARTMENTS)
+                  ->where('status', 'active')
+                  ->groupBy('department')
+                  ->orderBy('total', 'desc')
+                  ->get();
     }
 
     /**
-     * Check if employee has any training
+     * Get unit statistics per department
      */
-    public function hasTraining()
+    public function getUnitStats($department = null)
     {
-        return $this->trainingRecords()->exists();
+        $query = self::selectRaw('department, unit_organisasi, COUNT(*) as total')
+                    ->where('status', 'active');
+
+        if ($department) {
+            $query->where('department', $department);
+        }
+
+        return $query->groupBy('department', 'unit_organisasi')
+                    ->orderBy('department')
+                    ->orderBy('total', 'desc')
+                    ->get();
     }
 
     /**
-     * Get training summary
+     * BOOT METHOD: Auto-processing saat create/update
      */
-    public function getTrainingSummary()
+    protected static function boot()
     {
-        return [
-            'total' => $this->total_trainings_count,
-            'valid' => $this->valid_trainings_count,
-            'expired' => $this->expired_trainings_count,
-        ];
-    }
+        parent::boot();
 
-    // =========================================================================
-    // STATIC METHODS
-    // =========================================================================
+        static::creating(function ($employee) {
+            // Auto-generate NIK jika kosong
+            if (empty($employee->nik) && !empty($employee->nip)) {
+                $employee->nik = self::generateNik($employee->nip, $employee->department);
+            }
 
-    /**
-     * Get employee by NIP
-     */
-    public static function findByNip($nip)
-    {
-        return static::where('nip', $nip)->first();
-    }
+            // Set default status
+            if (empty($employee->status)) {
+                $employee->status = 'active';
+            }
 
-    /**
-     * Get employee by NIK
-     */
-    public static function findByNik($nik)
-    {
-        return static::where('nik', $nik)->first();
-    }
+            if (empty($employee->status_kerja)) {
+                $employee->status_kerja = 'Aktif';
+            }
+        });
 
-    /**
-     * Get all departments
-     */
-    public static function getAllDepartments()
-    {
-        return static::whereNotNull('unit_organisasi')
-                    ->distinct()
-                    ->pluck('unit_organisasi')
-                    ->filter()
-                    ->sort()
-                    ->values();
-    }
-
-    /**
-     * Get all positions
-     */
-    public static function getAllPositions()
-    {
-        return static::whereNotNull('jabatan')
-                    ->distinct()
-                    ->pluck('jabatan')
-                    ->filter()
-                    ->sort()
-                    ->values();
-    }
-
-    // =========================================================================
-    // SERIALIZATION
-    // =========================================================================
-
-    /**
-     * Get the array representation with minimal data
-     */
-    public function toMinimalArray()
-    {
-        return [
-            'id' => $this->id,
-            'nama_lengkap' => $this->nama_lengkap,
-            'nip' => $this->nip,
-            'nik' => $this->nik,
-            'display_name' => $this->display_name,
-        ];
+        static::updating(function ($employee) {
+            // Update NIK jika NIP berubah
+            if ($employee->isDirty('nip') && empty($employee->nik)) {
+                $employee->nik = self::generateNik($employee->nip, $employee->department);
+            }
+        });
     }
 }
