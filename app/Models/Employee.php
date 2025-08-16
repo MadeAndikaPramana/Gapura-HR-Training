@@ -4,282 +4,485 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 
 class Employee extends Model
 {
-    use HasFactory;
+    use HasFactory, SoftDeletes;
 
     /**
-     * UPDATED FOR MPGA: Field mapping sesuai Excel structure
-     * - NAMA -> nama_lengkap
-     * - NIPP -> nip
-     * - Dept/Unit -> unit_organisasi
-     * - Sheet name -> department
+     * GAPURA TRAINING SYSTEM - EMPLOYEE MODEL
+     * Phase 1: CRUD Employee dengan struktur MPGA Excel
+     *
+     * STANDARDIZED VERSION:
+     * - Menggunakan Laravel standard auto-increment ID sebagai primary key
+     * - NIP sebagai unique identifier untuk business logic
+     * - Support untuk MPGA Excel structure (department sheets)
+     * - Ready untuk Phase 2 (Training Records relationships)
      */
 
     protected $table = 'employees';
 
-    /**
-     * MPGA PRIMARY KEY: Gunakan auto-increment ID, tapi keep NIK unique
-     * Berubah dari NIK primary key ke standard Laravel ID untuk compatibility
-     */
+    // Standard Laravel auto-increment primary key
     protected $primaryKey = 'id';
     public $incrementing = true;
     protected $keyType = 'int';
 
     /**
-     * UPDATED FILLABLE: Field sesuai MPGA Excel + existing fields
+     * FILLABLE FIELDS - Sesuai dengan MPGA Excel structure dan form requirements
      */
     protected $fillable = [
-        // MPGA Core Fields (dari Excel)
-        'nip',              // NIPP dari Excel - REQUIRED
-        'nama_lengkap',     // NAMA dari Excel - REQUIRED
-        'unit_organisasi',  // Dept/Unit dari Excel - REQUIRED
+        // MPGA Core Fields (dari Excel struktur)
+        'nip',              // NIPP dari MPGA Excel - UNIQUE, business identifier
+        'nik',              // NIK - NULLABLE, bisa auto-generate
+        'nama_lengkap',     // NAMA dari MPGA Excel - REQUIRED
         'department',       // Sheet name (DEDICATED, LOADING, etc.) - REQUIRED
-        'unit_kerja',
+        'unit_organisasi',  // Dept/Unit dari MPGA Excel - REQUIRED
 
-        // Identity fields
-        'nik',              // NIK - OPTIONAL, bisa auto-generate
-
-        // Contact & Personal Info
-        'jenis_kelamin',
+        // Personal Information
+        'jenis_kelamin',    // L/P
         'tempat_lahir',
         'tanggal_lahir',
-        'usia',
-        'kota_domisili',
-        'alamat',
-        'handphone',
-        'email',
+        'usia',            // Calculated field
 
         // Work Information
+        'jabatan',         // Job position
+        'status_pegawai',  // PEGAWAI TETAP, PKWT, TAD PAKET SDM, TAD PAKET PEKERJAAN
+        'status_kerja',    // Aktif/Tidak Aktif
         'lokasi_kerja',
         'cabang',
-        'status_pegawai',
-        'status_kerja',
-        'provider',
+        'provider',        // Provider/Vendor info
 
-        // Organizational Structure
+        // Contact Information
+        'handphone',
+        'email',
+        'alamat',
+
+        // System Fields
+        'is_active',       // Boolean flag for soft delete alternative
+
+        // Future expansion fields (untuk Phase selanjutnya)
         'kode_organisasi',
         'nama_organisasi',
-        'nama_jabatan',
-        'jabatan',
         'kelompok_jabatan',
         'unit_kerja_kontrak',
 
-        // Employment Dates
+        // Employment dates (untuk Phase selanjutnya)
         'tmt_mulai_kerja',
         'tmt_mulai_jabatan',
         'tmt_berakhir_jabatan',
         'tmt_berakhir_kerja',
         'masa_kerja_bulan',
         'masa_kerja_tahun',
-
-        // Education
-        'pendidikan',
-        'pendidikan_terakhir',
-        'instansi_pendidikan',
-        'jurusan',
-        'remarks_pendidikan',
-        'tahun_lulus',
-
-        // Equipment & Benefits
-        'jenis_sepatu',
-        'ukuran_sepatu',
-        'seragam',
-        'no_bpjs_kesehatan',
-        'no_bpjs_ketenagakerjaan',
-        'grade',
-        'kategori_karyawan',
-        'tmt_pensiun',
-
-        // Physical Data
-        'weight',
-        'height',
-
-        // System Fields
-        'organization_id',
-        'status'
     ];
 
     /**
-     * CAST ATTRIBUTES
+     * FIELD CASTING
      */
     protected $casts = [
+        'tanggal_lahir' => 'date',
         'tmt_mulai_kerja' => 'date',
         'tmt_mulai_jabatan' => 'date',
         'tmt_berakhir_jabatan' => 'date',
         'tmt_berakhir_kerja' => 'date',
-        'tanggal_lahir' => 'date',
-        'tmt_pensiun' => 'date',
-        'tahun_lulus' => 'integer',
+        'is_active' => 'boolean',
         'usia' => 'integer',
-        'weight' => 'integer',
-        'height' => 'integer',
         'masa_kerja_bulan' => 'integer',
         'masa_kerja_tahun' => 'integer',
     ];
 
     /**
-     * MPGA CONSTANTS: Department options dari Excel sheets
+     * HIDDEN FIELDS - untuk API responses
      */
-    const MPGA_DEPARTMENTS = [
-        'DEDICATED',
-        'LOADING',
-        'RAMP',
-        'LOCO',
-        'ULD',
-        'LOST & FOUND',
-        'CARGO',
-        'ARRIVAL',
-        'GSE OPERATOR',
-        'FLOP',
-        'AVSEC',
-        'PORTER'
-    ];
-
-    const STATUS_PEGAWAI_OPTIONS = [
-        'PEGAWAI TETAP',
-        'PKWT',
-        'TAD PAKET SDM',
-        'TAD PAKET PEKERJAAN'
+    protected $hidden = [
+        'created_at',
+        'updated_at',
+        'deleted_at',
     ];
 
     /**
-     * MPGA SCOPES: Query helpers untuk MPGA data
+     * APPENDED ATTRIBUTES - computed fields
      */
-    public function scopeByDepartment($query, $department)
+    protected $appends = [
+        'full_department_name',
+        'calculated_age',
+        'status_label',
+    ];
+
+    // =====================================================
+    // RELATIONSHIPS (untuk Phase 2+)
+    // =====================================================
+
+    /**
+     * Training Records relationship (Phase 2)
+     */
+    public function trainingRecords()
+    {
+        // Uncomment when TrainingRecord model is ready in Phase 2
+        // return $this->hasMany(TrainingRecord::class, 'employee_id');
+
+        // Temporary return empty collection
+        return collect([]);
+    }
+
+    /**
+     * Background Checks relationship (Phase 2)
+     */
+    public function backgroundChecks()
+    {
+        // Uncomment when BackgroundCheck model is ready in Phase 2
+        // return $this->hasMany(BackgroundCheck::class, 'employee_id');
+
+        // Temporary return empty collection
+        return collect([]);
+    }
+
+    // =====================================================
+    // QUERY SCOPES
+    // =====================================================
+
+    /**
+     * Scope untuk active employees
+     */
+    public function scopeActive(Builder $query): Builder
+    {
+        return $query->where('is_active', true);
+    }
+
+    /**
+     * Scope untuk inactive employees
+     */
+    public function scopeInactive(Builder $query): Builder
+    {
+        return $query->where('is_active', false);
+    }
+
+    /**
+     * Scope by department (MPGA sheets)
+     */
+    public function scopeByDepartment(Builder $query, string $department): Builder
     {
         return $query->where('department', $department);
     }
 
-    public function scopeByUnit($query, $unit)
+    /**
+     * Scope by unit organisasi
+     */
+    public function scopeByUnit(Builder $query, string $unit): Builder
     {
         return $query->where('unit_organisasi', $unit);
     }
 
-    public function scopeActive($query)
+    /**
+     * Scope by status pegawai
+     */
+    public function scopeByStatus(Builder $query, string $status): Builder
     {
-        return $query->where('status_kerja', 'Aktif')
-                    ->where('status', 'active');
-    }
-
-    public function scopeMpgaEmployees($query)
-    {
-        return $query->whereIn('department', self::MPGA_DEPARTMENTS);
+        return $query->where('status_pegawai', $status);
     }
 
     /**
-     * RELATIONSHIPS: Training system relationships
+     * Scope untuk search (nama, NIP, NIK)
      */
-    public function trainingRecords()
+    public function scopeSearch(Builder $query, string $search): Builder
     {
-        return $this->hasMany(TrainingRecord::class);
+        return $query->where(function($q) use ($search) {
+            $q->where('nama_lengkap', 'like', "%{$search}%")
+              ->orWhere('nip', 'like', "%{$search}%")
+              ->orWhere('nik', 'like', "%{$search}%")
+              ->orWhere('jabatan', 'like', "%{$search}%")
+              ->orWhere('unit_organisasi', 'like', "%{$search}%");
+        });
     }
 
-    public function backgroundChecks()
+    // =====================================================
+    // ACCESSOR METHODS (Computed Attributes)
+    // =====================================================
+
+    /**
+     * Get full department name with unit
+     */
+    public function getFullDepartmentNameAttribute(): string
     {
-        return $this->hasMany(BackgroundCheck::class, 'employee_nip', 'nip');
+        if ($this->unit_organisasi && $this->department) {
+            return "{$this->department} - {$this->unit_organisasi}";
+        }
+        return $this->department ?? 'Unknown Department';
     }
 
     /**
-     * ACCESSORS: Computed properties
+     * Calculate current age from birth date
      */
-    public function getFullIdentityAttribute()
+    public function getCalculatedAgeAttribute(): ?int
     {
-        return "{$this->nama_lengkap} (NIP: {$this->nip})";
-    }
+        if (!$this->tanggal_lahir) {
+            return null;
+        }
 
-    public function getDepartmentUnitAttribute()
-    {
-        return "{$this->department} - {$this->unit_organisasi}";
-    }
-
-    /**
-     * MUTATORS: Auto-processing
-     */
-    public function setNipAttribute($value)
-    {
-        $this->attributes['nip'] = str_pad($value, 7, '0', STR_PAD_LEFT);
-    }
-
-    public function setNamaLengkapAttribute($value)
-    {
-        $this->attributes['nama_lengkap'] = strtoupper(trim($value));
+        return Carbon::parse($this->tanggal_lahir)->age;
     }
 
     /**
-     * MPGA HELPER METHODS
+     * Get human readable status label
      */
+    public function getStatusLabelAttribute(): string
+    {
+        if (!$this->is_active) {
+            return 'Tidak Aktif';
+        }
+
+        return match($this->status_pegawai) {
+            'PEGAWAI TETAP' => 'Pegawai Tetap',
+            'PKWT' => 'Kontrak',
+            'TAD PAKET SDM' => 'TAD SDM',
+            'TAD PAKET PEKERJAAN' => 'TAD Pekerjaan',
+            default => $this->status_pegawai ?? 'Unknown'
+        };
+    }
+
+    // =====================================================
+    // MUTATOR METHODS (Data Formatting)
+    // =====================================================
 
     /**
-     * Generate NIK if not provided
+     * Auto-uppercase nama lengkap
      */
-    public static function generateNik($nip, $department = null)
+    public function setNamaLengkapAttribute($value): void
     {
-        $prefix = $department ? substr($department, 0, 3) : 'EMP';
-        return strtoupper($prefix) . str_pad($nip, 6, '0', STR_PAD_LEFT);
+        $this->attributes['nama_lengkap'] = strtoupper($value);
+    }
+
+    /**
+     * Auto-uppercase department
+     */
+    public function setDepartmentAttribute($value): void
+    {
+        $this->attributes['department'] = strtoupper($value);
+    }
+
+    /**
+     * Auto-uppercase unit organisasi
+     */
+    public function setUnitOrganisasiAttribute($value): void
+    {
+        $this->attributes['unit_organisasi'] = strtoupper($value);
+    }
+
+    /**
+     * Format phone number
+     */
+    public function setHandphoneAttribute($value): void
+    {
+        if ($value) {
+            // Remove any non-numeric characters except +
+            $cleaned = preg_replace('/[^0-9+]/', '', $value);
+            $this->attributes['handphone'] = $cleaned;
+        } else {
+            $this->attributes['handphone'] = null;
+        }
+    }
+
+    /**
+     * Auto-calculate age when birth date is set
+     */
+    public function setTanggalLahirAttribute($value): void
+    {
+        if ($value) {
+            $this->attributes['tanggal_lahir'] = $value;
+            $this->attributes['usia'] = Carbon::parse($value)->age;
+        } else {
+            $this->attributes['tanggal_lahir'] = null;
+            $this->attributes['usia'] = null;
+        }
+    }
+
+    // =====================================================
+    // BUSINESS LOGIC METHODS
+    // =====================================================
+
+    /**
+     * Check if employee has valid training records (Phase 2+)
+     */
+    public function hasValidTraining(): bool
+    {
+        // TODO: Implement in Phase 2
+        // return $this->trainingRecords()->where('expiry_date', '>', now())->exists();
+        return false;
+    }
+
+    /**
+     * Get expired training count (Phase 2+)
+     */
+    public function getExpiredTrainingCount(): int
+    {
+        // TODO: Implement in Phase 2
+        // return $this->trainingRecords()->where('expiry_date', '<=', now())->count();
+        return 0;
+    }
+
+    /**
+     * Check if employee is compliant (Phase 2+)
+     */
+    public function isCompliant(): bool
+    {
+        // TODO: Implement in Phase 2
+        // Check if all mandatory training is up to date
+        return true;
+    }
+
+    /**
+     * Get training compliance percentage (Phase 2+)
+     */
+    public function getCompliancePercentage(): float
+    {
+        // TODO: Implement in Phase 2
+        return 0.0;
+    }
+
+    /**
+     * Activate employee
+     */
+    public function activate(): bool
+    {
+        return $this->update([
+            'is_active' => true,
+            'status_kerja' => 'Aktif'
+        ]);
+    }
+
+    /**
+     * Deactivate employee (soft delete alternative)
+     */
+    public function deactivate(): bool
+    {
+        return $this->update([
+            'is_active' => false,
+            'status_kerja' => 'Tidak Aktif'
+        ]);
+    }
+
+    // =====================================================
+    // STATIC HELPER METHODS
+    // =====================================================
+
+    /**
+     * Get MPGA department options
+     */
+    public static function getMPGADepartments(): array
+    {
+        return [
+            'DEDICATED',
+            'LOADING',
+            'RAMP',
+            'LOCO',
+            'ULD',
+            'LOST & FOUND',
+            'CARGO',
+            'ARRIVAL',
+            'GSE OPERATOR',
+            'FLOP',
+            'AVSEC',
+            'PORTER'
+        ];
+    }
+
+    /**
+     * Get status pegawai options
+     */
+    public static function getStatusOptions(): array
+    {
+        return [
+            'PEGAWAI TETAP',
+            'PKWT',
+            'TAD PAKET SDM',
+            'TAD PAKET PEKERJAAN'
+        ];
+    }
+
+    /**
+     * Generate unique NIP
+     */
+    public static function generateNIP(): string
+    {
+        do {
+            $nip = date('y') . str_pad(mt_rand(1, 99999), 5, '0', STR_PAD_LEFT);
+        } while (self::where('nip', $nip)->exists());
+
+        return $nip;
+    }
+
+    /**
+     * Generate unique NIK
+     */
+    public static function generateNIK(): string
+    {
+        do {
+            $nik = date('ym') . str_pad(mt_rand(1, 999999), 6, '0', STR_PAD_LEFT);
+        } while (self::where('nik', $nik)->exists());
+
+        return $nik;
     }
 
     /**
      * Get department statistics
      */
-    public static function getDepartmentStats()
+    public static function getDepartmentStats(): array
     {
-        return self::selectRaw('department, COUNT(*) as total')
-                  ->whereIn('department', self::MPGA_DEPARTMENTS)
-                  ->where('status', 'active')
+        return self::active()
+                  ->selectRaw('department, COUNT(*) as total')
                   ->groupBy('department')
-                  ->orderBy('total', 'desc')
-                  ->get();
+                  ->orderByDesc('total')
+                  ->get()
+                  ->pluck('total', 'department')
+                  ->toArray();
     }
 
     /**
-     * Get unit statistics per department
+     * Get monthly registration stats
      */
-    public function getUnitStats($department = null)
+    public static function getMonthlyStats(int $months = 6): array
     {
-        $query = self::selectRaw('department, unit_organisasi, COUNT(*) as total')
-                    ->where('status', 'active');
+        $stats = [];
+        for ($i = $months; $i >= 0; $i--) {
+            $date = now()->subMonths($i);
+            $count = self::whereYear('created_at', $date->year)
+                        ->whereMonth('created_at', $date->month)
+                        ->count();
 
-        if ($department) {
-            $query->where('department', $department);
+            $stats[$date->format('M Y')] = $count;
         }
 
-        return $query->groupBy('department', 'unit_organisasi')
-                    ->orderBy('department')
-                    ->orderBy('total', 'desc')
-                    ->get();
+        return $stats;
     }
 
+    // =====================================================
+    // MODEL EVENTS
+    // =====================================================
+
     /**
-     * BOOT METHOD: Auto-processing saat create/update
+     * Boot method for model events
      */
     protected static function boot()
     {
         parent::boot();
 
+        // Auto-generate NIK jika kosong saat creating
         static::creating(function ($employee) {
-            // Auto-generate NIK jika kosong
-            if (empty($employee->nik) && !empty($employee->nip)) {
-                $employee->nik = self::generateNik($employee->nip, $employee->department);
+            if (empty($employee->nik)) {
+                $employee->nik = self::generateNIK();
             }
 
-            // Set default status
-            if (empty($employee->status)) {
-                $employee->status = 'active';
-            }
-
-            if (empty($employee->status_kerja)) {
-                $employee->status_kerja = 'Aktif';
-            }
+            // Default values
+            $employee->is_active = $employee->is_active ?? true;
+            $employee->status_kerja = $employee->status_kerja ?? 'Aktif';
         });
 
+        // Update age ketika tanggal lahir berubah
         static::updating(function ($employee) {
-            // Update NIK jika NIP berubah
-            if ($employee->isDirty('nip') && empty($employee->nik)) {
-                $employee->nik = self::generateNik($employee->nip, $employee->department);
+            if ($employee->isDirty('tanggal_lahir') && $employee->tanggal_lahir) {
+                $employee->usia = Carbon::parse($employee->tanggal_lahir)->age;
             }
         });
     }

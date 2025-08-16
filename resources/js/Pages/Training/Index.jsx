@@ -3,7 +3,7 @@ import { Head, Link, router } from "@inertiajs/react";
 import DashboardLayout from "@/Layouts/DashboardLayout";
 import {
     Search,
-    Plus,
+    UserPlus,
     Filter,
     Eye,
     Edit,
@@ -50,7 +50,7 @@ export default function TrainingIndex({
                             href="/training/create"
                             className="flex items-center gap-2 px-4 py-2 bg-[#439454] text-white rounded-xl hover:bg-[#358945] transition-all duration-300 shadow-lg font-medium"
                         >
-                            <Plus className="w-4 h-4" />
+                            <UserPlus className="w-4 h-4" />
                             Add Training
                         </Link>
                     </div>

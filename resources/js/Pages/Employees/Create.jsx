@@ -1,250 +1,514 @@
-import React from 'react';
-import { Head, useForm } from '@inertiajs/react';
-import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
+// ============================================================================
+// EMPLOYEE CREATE FORM - LOCAL STATE SOLUTION (STABLE INPUT)
+// ============================================================================
+// Solution: Use local state for inputs, sync with Inertia on submit only
 
-export default function Create({ auth, departments = [], statusPegawaiOptions = [] }) {
-    const { data, setData, post, processing, errors } = useForm({
-        nip: '',
-        nama_lengkap: '',
-        unit_organisasi: '',
-        unit_kerja: '',
-        department: '',
-        status_pegawai: 'PEGAWAI TETAP',
-        status_kerja: 'Aktif',
-        jenis_kelamin: '',
-        email: '',
-        handphone: '',
+import React, { useState } from "react";
+import { Head, Link, useForm } from "@inertiajs/react";
+import DashboardLayout from "@/Layouts/DashboardLayout";
+import {
+    ArrowLeft,
+    Save,
+    User,
+    Building2,
+    Phone,
+    Mail,
+    MapPin,
+    Calendar,
+    Badge,
+    AlertCircle,
+} from "lucide-react";
+
+export default function EmployeeCreate({
+    departments = [],
+    units = [],
+    statusOptions = [],
+    title = "Tambah Karyawan Baru",
+    employee = null,
+    auth
+}) {
+    const isEdit = !!employee;
+
+    // LOCAL STATE - This prevents re-render issues
+    const [formData, setFormData] = useState({
+        nip: employee?.nip || '',
+        nama_lengkap: employee?.nama_lengkap || '',
+        department: employee?.department || '',
+        unit_organisasi: employee?.unit_organisasi || '',
+        jenis_kelamin: employee?.jenis_kelamin || 'L',
+        tempat_lahir: employee?.tempat_lahir || '',
+        tanggal_lahir: employee?.tanggal_lahir || '',
+        jabatan: employee?.jabatan || '',
+        status_pegawai: employee?.status_pegawai || 'PEGAWAI TETAP',
+        lokasi_kerja: employee?.lokasi_kerja || '',
+        cabang: employee?.cabang || '',
+        provider: employee?.provider || '',
+        handphone: employee?.handphone || '',
+        email: employee?.email || '',
+        alamat: employee?.alamat || '',
     });
 
-    const handleSubmit = (e) => {
-        e.preventDefault();
-        post(route('employees.store'));
+    const [activeTab, setActiveTab] = useState('personal');
+    const [validationErrors, setValidationErrors] = useState({});
+
+    // Inertia form - only for submission
+    const { post, put, processing } = useForm();
+
+    // STABLE input handler - no re-render
+    const handleChange = (name, value) => {
+        setFormData(prev => ({
+            ...prev,
+            [name]: value
+        }));
+
+        // Clear validation error for this field
+        if (validationErrors[name]) {
+            setValidationErrors(prev => ({
+                ...prev,
+                [name]: null
+            }));
+        }
     };
 
-    // Default MPGA departments if not provided from backend
-    const mpgaDepartments = departments.length > 0 ? departments : [
+    // Form submission
+    const handleSubmit = (e) => {
+        e.preventDefault();
+
+        // Clear previous errors
+        setValidationErrors({});
+
+        // Basic validation
+        const errors = {};
+        if (!formData.nip.trim()) errors.nip = 'NIP wajib diisi';
+        if (!formData.nama_lengkap.trim()) errors.nama_lengkap = 'Nama lengkap wajib diisi';
+        if (!formData.department.trim()) errors.department = 'Department wajib dipilih';
+        if (!formData.unit_organisasi.trim()) errors.unit_organisasi = 'Unit organisasi wajib diisi';
+
+        if (Object.keys(errors).length > 0) {
+            setValidationErrors(errors);
+            return;
+        }
+
+        // Submit with Inertia
+        if (isEdit) {
+            put(`/employees/${employee.id}`, {
+                data: formData,
+                onSuccess: () => {
+                    // Success handled by redirect
+                },
+                onError: (errors) => {
+                    setValidationErrors(errors);
+                }
+            });
+        } else {
+            post('/employees', {
+                data: formData,
+                onSuccess: () => {
+                    // Success handled by redirect
+                },
+                onError: (errors) => {
+                    setValidationErrors(errors);
+                }
+            });
+        }
+    };
+
+    // Department options
+    const departmentOptions = departments.length > 0 ? departments : [
         'DEDICATED', 'LOADING', 'RAMP', 'LOCO', 'ULD',
         'LOST & FOUND', 'CARGO', 'ARRIVAL', 'GSE OPERATOR',
         'FLOP', 'AVSEC', 'PORTER'
     ];
 
-    const statusOptions = statusPegawaiOptions.length > 0 ? statusPegawaiOptions : [
+    // Status options
+    const employeeStatusOptions = statusOptions.length > 0 ? statusOptions : [
         'PEGAWAI TETAP', 'PKWT', 'TAD PAKET SDM', 'TAD PAKET PEKERJAAN'
     ];
 
     return (
-        <AuthenticatedLayout
-            user={auth.user}
-            header={<h2 className="font-semibold text-xl text-gray-800 leading-tight">Tambah Karyawan</h2>}
-        >
-            <Head title="Tambah Karyawan" />
+        <DashboardLayout auth={auth} header={title}>
+            <Head title={title} />
 
-            <div className="py-12">
-                <div className="max-w-7xl mx-auto sm:px-6 lg:px-8">
-                    <div className="bg-white overflow-hidden shadow-sm sm:rounded-lg">
-                        <div className="p-6 text-gray-900">
-
-                            {/* Form Header */}
-                            <div className="mb-6">
-                                <h3 className="text-lg font-medium text-gray-900">
-                                    Tambah Karyawan Baru
-                                </h3>
-                                <p className="mt-1 text-sm text-gray-600">
-                                    Isi data karyawan sesuai dengan struktur MPGA
-                                </p>
-                            </div>
-
-                            {/* Form */}
-                            <form onSubmit={handleSubmit} className="space-y-6">
-
-                                {/* Basic Info */}
-                                <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-
-                                    {/* NIP */}
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700">
-                                            NIP <span className="text-red-500">*</span>
-                                        </label>
-                                        <input
-                                            type="text"
-                                            value={data.nip}
-                                            onChange={(e) => setData('nip', e.target.value)}
-                                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                                            placeholder="Contoh: 2160800"
-                                            required
-                                        />
-                                        {errors.nip && <div className="text-red-500 text-sm mt-1">{errors.nip}</div>}
-                                    </div>
-
-                                    {/* Nama Lengkap */}
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700">
-                                            Nama Lengkap <span className="text-red-500">*</span>
-                                        </label>
-                                        <input
-                                            type="text"
-                                            value={data.nama_lengkap}
-                                            onChange={(e) => setData('nama_lengkap', e.target.value)}
-                                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                                            placeholder="Contoh: PUTU EKA RESMAWAN"
-                                            required
-                                        />
-                                        {errors.nama_lengkap && <div className="text-red-500 text-sm mt-1">{errors.nama_lengkap}</div>}
-                                    </div>
-
-                                    {/* Unit Organisasi */}
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700">
-                                            Unit Organisasi <span className="text-red-500">*</span>
-                                        </label>
-                                        <input
-                                            type="text"
-                                            value={data.unit_organisasi}
-                                            onChange={(e) => setData('unit_organisasi', e.target.value)}
-                                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                                            placeholder="Contoh: AE, Controller, Operations"
-                                            required
-                                        />
-                                        {errors.unit_organisasi && <div className="text-red-500 text-sm mt-1">{errors.unit_organisasi}</div>}
-                                    </div>
-
-                                    {/* Unit Kerja */}
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700">
-                                            Unit Kerja <span className="text-red-500">*</span>
-                                        </label>
-                                        <input
-                                            type="text"
-                                            value={data.unit_kerja}
-                                            onChange={(e) => setData('unit_kerja', e.target.value)}
-                                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                                            placeholder="Contoh: Account Executive, Flight Controller"
-                                            required
-                                        />
-                                        {errors.unit_kerja && <div className="text-red-500 text-sm mt-1">{errors.unit_kerja}</div>}
-                                    </div>
-
-                                    {/* Department */}
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700">
-                                            Department MPGA <span className="text-red-500">*</span>
-                                        </label>
-                                        <select
-                                            value={data.department}
-                                            onChange={(e) => setData('department', e.target.value)}
-                                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                                            required
-                                        >
-                                            <option value="">Pilih Department</option>
-                                            {mpgaDepartments.map((dept) => (
-                                                <option key={dept} value={dept}>
-                                                    {dept}
-                                                </option>
-                                            ))}
-                                        </select>
-                                        {errors.department && <div className="text-red-500 text-sm mt-1">{errors.department}</div>}
-                                    </div>
-
-                                    {/* Status Pegawai */}
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700">
-                                            Status Pegawai <span className="text-red-500">*</span>
-                                        </label>
-                                        <select
-                                            value={data.status_pegawai}
-                                            onChange={(e) => setData('status_pegawai', e.target.value)}
-                                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                                            required
-                                        >
-                                            {statusOptions.map((status) => (
-                                                <option key={status} value={status}>
-                                                    {status}
-                                                </option>
-                                            ))}
-                                        </select>
-                                        {errors.status_pegawai && <div className="text-red-500 text-sm mt-1">{errors.status_pegawai}</div>}
-                                    </div>
-
-                                    {/* Jenis Kelamin */}
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700">
-                                            Jenis Kelamin
-                                        </label>
-                                        <select
-                                            value={data.jenis_kelamin}
-                                            onChange={(e) => setData('jenis_kelamin', e.target.value)}
-                                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                                        >
-                                            <option value="">Pilih Jenis Kelamin</option>
-                                            <option value="L">Laki-laki</option>
-                                            <option value="P">Perempuan</option>
-                                        </select>
-                                        {errors.jenis_kelamin && <div className="text-red-500 text-sm mt-1">{errors.jenis_kelamin}</div>}
-                                    </div>
-
-                                    {/* Email */}
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700">
-                                            Email
-                                        </label>
-                                        <input
-                                            type="email"
-                                            value={data.email}
-                                            onChange={(e) => setData('email', e.target.value)}
-                                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                                            placeholder="email@gapura.com"
-                                        />
-                                        {errors.email && <div className="text-red-500 text-sm mt-1">{errors.email}</div>}
-                                    </div>
-
-                                    {/* Handphone */}
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700">
-                                            Handphone
-                                        </label>
-                                        <input
-                                            type="text"
-                                            value={data.handphone}
-                                            onChange={(e) => setData('handphone', e.target.value)}
-                                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                                            placeholder="081234567890"
-                                        />
-                                        {errors.handphone && <div className="text-red-500 text-sm mt-1">{errors.handphone}</div>}
-                                    </div>
-
-                                </div>
-
-                                {/* Form Actions */}
-                                <div className="flex items-center justify-end space-x-4 pt-4">
-                                    <a
-                                        href={route('employees.index')}
-                                        className="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded"
-                                    >
-                                        Batal
-                                    </a>
-                                    <button
-                                        type="submit"
-                                        disabled={processing}
-                                        className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded disabled:opacity-50"
-                                    >
-                                        {processing ? 'Menyimpan...' : 'Simpan Karyawan'}
-                                    </button>
-                                </div>
-
-                            </form>
-
-                            {/* Debug Info (remove in production) */}
-                            <div className="mt-8 p-4 bg-gray-100 rounded text-xs text-gray-600">
-                                <strong>Debug Info:</strong>
-                                <br />• NIK akan auto-generate saat submit
-                                <br />• Department: {data.department || 'Belum dipilih'}
-                                <br />• Status: {data.status_pegawai}
-                            </div>
-
+            <div className="p-6 space-y-6">
+                {/* Header */}
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                        <Link
+                            href="/employees"
+                            className="p-2 text-gray-500 hover:text-[#439454] hover:bg-gray-100 rounded-lg transition-all duration-200"
+                        >
+                            <ArrowLeft className="w-5 h-5" />
+                        </Link>
+                        <div>
+                            <h1 className="text-2xl font-bold text-gray-900">{title}</h1>
+                            <p className="text-sm text-gray-600 mt-1">
+                                {isEdit ? 'Perbarui informasi karyawan' : 'Tambahkan karyawan baru ke sistem'}
+                            </p>
                         </div>
                     </div>
                 </div>
+
+                <form onSubmit={handleSubmit} className="space-y-6">
+                    {/* Tab Navigation */}
+                    <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6">
+                        <div className="flex items-center gap-2 mb-6">
+                            <button
+                                type="button"
+                                onClick={() => setActiveTab('personal')}
+                                className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all duration-300 ${
+                                    activeTab === 'personal'
+                                        ? 'bg-[#439454] text-white shadow-lg'
+                                        : 'text-gray-600 hover:text-[#439454] hover:bg-gray-100'
+                                }`}
+                            >
+                                <User className="w-4 h-4" />
+                                Data Personal
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setActiveTab('work')}
+                                className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all duration-300 ${
+                                    activeTab === 'work'
+                                        ? 'bg-[#439454] text-white shadow-lg'
+                                        : 'text-gray-600 hover:text-[#439454] hover:bg-gray-100'
+                                }`}
+                            >
+                                <Building2 className="w-4 h-4" />
+                                Data Pekerjaan
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setActiveTab('contact')}
+                                className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all duration-300 ${
+                                    activeTab === 'contact'
+                                        ? 'bg-[#439454] text-white shadow-lg'
+                                        : 'text-gray-600 hover:text-[#439454] hover:bg-gray-100'
+                                }`}
+                            >
+                                <Phone className="w-4 h-4" />
+                                Kontak & Alamat
+                            </button>
+                        </div>
+
+                        {/* Personal Information Tab */}
+                        {activeTab === 'personal' && (
+                            <div className="space-y-6">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    {/* NIP */}
+                                    <div className="space-y-2">
+                                        <label className="block text-sm font-medium text-gray-700">
+                                            NIP <span className="text-red-500 ml-1">*</span>
+                                        </label>
+                                        <div className="relative">
+                                            <Badge className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                                            <input
+                                                type="text"
+                                                value={formData.nip}
+                                                onChange={(e) => handleChange('nip', e.target.value)}
+                                                placeholder="Masukkan NIP karyawan"
+                                                className={`w-full pl-10 pr-3 py-2.5 border rounded-xl focus:ring-2 focus:ring-[#439454] focus:border-transparent transition-all duration-300 ${
+                                                    validationErrors.nip ? 'border-red-500' : 'border-gray-300'
+                                                }`}
+                                            />
+                                        </div>
+                                        {validationErrors.nip && (
+                                            <div className="flex items-center gap-2 text-sm text-red-600">
+                                                <AlertCircle className="w-4 h-4" />
+                                                <span>{validationErrors.nip}</span>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Nama Lengkap */}
+                                    <div className="space-y-2">
+                                        <label className="block text-sm font-medium text-gray-700">
+                                            Nama Lengkap <span className="text-red-500 ml-1">*</span>
+                                        </label>
+                                        <div className="relative">
+                                            <User className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                                            <input
+                                                type="text"
+                                                value={formData.nama_lengkap}
+                                                onChange={(e) => handleChange('nama_lengkap', e.target.value)}
+                                                placeholder="Masukkan nama lengkap"
+                                                className={`w-full pl-10 pr-3 py-2.5 border rounded-xl focus:ring-2 focus:ring-[#439454] focus:border-transparent transition-all duration-300 ${
+                                                    validationErrors.nama_lengkap ? 'border-red-500' : 'border-gray-300'
+                                                }`}
+                                            />
+                                        </div>
+                                        {validationErrors.nama_lengkap && (
+                                            <div className="flex items-center gap-2 text-sm text-red-600">
+                                                <AlertCircle className="w-4 h-4" />
+                                                <span>{validationErrors.nama_lengkap}</span>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Jenis Kelamin */}
+                                    <div className="space-y-2">
+                                        <label className="block text-sm font-medium text-gray-700">
+                                            Jenis Kelamin <span className="text-red-500 ml-1">*</span>
+                                        </label>
+                                        <select
+                                            value={formData.jenis_kelamin}
+                                            onChange={(e) => handleChange('jenis_kelamin', e.target.value)}
+                                            className="w-full pl-3 pr-3 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#439454] focus:border-transparent transition-all duration-300"
+                                        >
+                                            <option value="L">Laki-laki</option>
+                                            <option value="P">Perempuan</option>
+                                        </select>
+                                    </div>
+
+                                    {/* Tempat Lahir */}
+                                    <div className="space-y-2">
+                                        <label className="block text-sm font-medium text-gray-700">
+                                            Tempat Lahir
+                                        </label>
+                                        <div className="relative">
+                                            <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                                            <input
+                                                type="text"
+                                                value={formData.tempat_lahir}
+                                                onChange={(e) => handleChange('tempat_lahir', e.target.value)}
+                                                placeholder="Masukkan tempat lahir"
+                                                className="w-full pl-10 pr-3 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#439454] focus:border-transparent transition-all duration-300"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    {/* Tanggal Lahir */}
+                                    <div className="space-y-2">
+                                        <label className="block text-sm font-medium text-gray-700">
+                                            Tanggal Lahir
+                                        </label>
+                                        <div className="relative">
+                                            <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                                            <input
+                                                type="date"
+                                                value={formData.tanggal_lahir}
+                                                onChange={(e) => handleChange('tanggal_lahir', e.target.value)}
+                                                className="w-full pl-10 pr-3 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#439454] focus:border-transparent transition-all duration-300"
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Work Information Tab */}
+                        {activeTab === 'work' && (
+                            <div className="space-y-6">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    {/* Department */}
+                                    <div className="space-y-2">
+                                        <label className="block text-sm font-medium text-gray-700">
+                                            Department <span className="text-red-500 ml-1">*</span>
+                                        </label>
+                                        <select
+                                            value={formData.department}
+                                            onChange={(e) => handleChange('department', e.target.value)}
+                                            className={`w-full pl-3 pr-3 py-2.5 border rounded-xl focus:ring-2 focus:ring-[#439454] focus:border-transparent transition-all duration-300 ${
+                                                validationErrors.department ? 'border-red-500' : 'border-gray-300'
+                                            }`}
+                                        >
+                                            <option value="">Pilih Department</option>
+                                            {departmentOptions.map((dept) => (
+                                                <option key={dept} value={dept}>{dept}</option>
+                                            ))}
+                                        </select>
+                                        {validationErrors.department && (
+                                            <div className="flex items-center gap-2 text-sm text-red-600">
+                                                <AlertCircle className="w-4 h-4" />
+                                                <span>{validationErrors.department}</span>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Unit Organisasi */}
+                                    <div className="space-y-2">
+                                        <label className="block text-sm font-medium text-gray-700">
+                                            Unit Organisasi <span className="text-red-500 ml-1">*</span>
+                                        </label>
+                                        <div className="relative">
+                                            <Building2 className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                                            <input
+                                                type="text"
+                                                value={formData.unit_organisasi}
+                                                onChange={(e) => handleChange('unit_organisasi', e.target.value)}
+                                                placeholder="Masukkan unit organisasi"
+                                                className={`w-full pl-10 pr-3 py-2.5 border rounded-xl focus:ring-2 focus:ring-[#439454] focus:border-transparent transition-all duration-300 ${
+                                                    validationErrors.unit_organisasi ? 'border-red-500' : 'border-gray-300'
+                                                }`}
+                                            />
+                                        </div>
+                                        {validationErrors.unit_organisasi && (
+                                            <div className="flex items-center gap-2 text-sm text-red-600">
+                                                <AlertCircle className="w-4 h-4" />
+                                                <span>{validationErrors.unit_organisasi}</span>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Jabatan */}
+                                    <div className="space-y-2">
+                                        <label className="block text-sm font-medium text-gray-700">
+                                            Jabatan
+                                        </label>
+                                        <div className="relative">
+                                            <Badge className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                                            <input
+                                                type="text"
+                                                value={formData.jabatan}
+                                                onChange={(e) => handleChange('jabatan', e.target.value)}
+                                                placeholder="Masukkan jabatan"
+                                                className="w-full pl-10 pr-3 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#439454] focus:border-transparent transition-all duration-300"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    {/* Status Pegawai */}
+                                    <div className="space-y-2">
+                                        <label className="block text-sm font-medium text-gray-700">
+                                            Status Pegawai <span className="text-red-500 ml-1">*</span>
+                                        </label>
+                                        <select
+                                            value={formData.status_pegawai}
+                                            onChange={(e) => handleChange('status_pegawai', e.target.value)}
+                                            className="w-full pl-3 pr-3 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#439454] focus:border-transparent transition-all duration-300"
+                                        >
+                                            {employeeStatusOptions.map((status) => (
+                                                <option key={status} value={status}>{status}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+
+                                    {/* Lokasi Kerja */}
+                                    <div className="space-y-2">
+                                        <label className="block text-sm font-medium text-gray-700">
+                                            Lokasi Kerja
+                                        </label>
+                                        <div className="relative">
+                                            <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                                            <input
+                                                type="text"
+                                                value={formData.lokasi_kerja}
+                                                onChange={(e) => handleChange('lokasi_kerja', e.target.value)}
+                                                placeholder="Masukkan lokasi kerja"
+                                                className="w-full pl-10 pr-3 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#439454] focus:border-transparent transition-all duration-300"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    {/* Cabang */}
+                                    <div className="space-y-2">
+                                        <label className="block text-sm font-medium text-gray-700">
+                                            Cabang
+                                        </label>
+                                        <div className="relative">
+                                            <Building2 className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                                            <input
+                                                type="text"
+                                                value={formData.cabang}
+                                                onChange={(e) => handleChange('cabang', e.target.value)}
+                                                placeholder="Masukkan cabang"
+                                                className="w-full pl-10 pr-3 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#439454] focus:border-transparent transition-all duration-300"
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Contact Information Tab */}
+                        {activeTab === 'contact' && (
+                            <div className="space-y-6">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    {/* Handphone */}
+                                    <div className="space-y-2">
+                                        <label className="block text-sm font-medium text-gray-700">
+                                            Nomor Handphone
+                                        </label>
+                                        <div className="relative">
+                                            <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                                            <input
+                                                type="tel"
+                                                value={formData.handphone}
+                                                onChange={(e) => handleChange('handphone', e.target.value)}
+                                                placeholder="Masukkan nomor handphone"
+                                                className="w-full pl-10 pr-3 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#439454] focus:border-transparent transition-all duration-300"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    {/* Email */}
+                                    <div className="space-y-2">
+                                        <label className="block text-sm font-medium text-gray-700">
+                                            Email
+                                        </label>
+                                        <div className="relative">
+                                            <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                                            <input
+                                                type="email"
+                                                value={formData.email}
+                                                onChange={(e) => handleChange('email', e.target.value)}
+                                                placeholder="Masukkan alamat email"
+                                                className="w-full pl-10 pr-3 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#439454] focus:border-transparent transition-all duration-300"
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Alamat */}
+                                <div className="space-y-2">
+                                    <label className="block text-sm font-medium text-gray-700">
+                                        Alamat
+                                    </label>
+                                    <div className="relative">
+                                        <MapPin className="absolute left-3 top-3 text-gray-400 w-4 h-4" />
+                                        <textarea
+                                            value={formData.alamat}
+                                            onChange={(e) => handleChange('alamat', e.target.value)}
+                                            placeholder="Masukkan alamat lengkap"
+                                            rows="4"
+                                            className="w-full pl-10 pr-3 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#439454] focus:border-transparent transition-all duration-300 resize-none"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Action Buttons */}
+                    <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6">
+                        <div className="flex items-center justify-between">
+                            <Link
+                                href="/employees"
+                                className="flex items-center gap-2 px-6 py-2.5 border-2 border-gray-300 text-gray-700 rounded-xl hover:border-gray-400 transition-all duration-300 font-medium"
+                            >
+                                Batal
+                            </Link>
+
+                            <button
+                                type="submit"
+                                disabled={processing}
+                                className="flex items-center gap-2 px-6 py-2.5 bg-[#439454] text-white rounded-xl hover:bg-[#358945] disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 shadow-lg hover:shadow-xl font-medium"
+                            >
+                                {processing ? (
+                                    <>
+                                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                                        {isEdit ? 'Memperbarui...' : 'Menyimpan...'}
+                                    </>
+                                ) : (
+                                    <>
+                                        <Save className="w-4 h-4" />
+                                        {isEdit ? 'Perbarui Karyawan' : 'Simpan Karyawan'}
+                                    </>
+                                )}
+                            </button>
+                        </div>
+                    </div>
+                </form>
             </div>
-        </AuthenticatedLayout>
+        </DashboardLayout>
     );
 }
