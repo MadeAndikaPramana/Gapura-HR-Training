@@ -1,10 +1,10 @@
 // ============================================================================
-// EMPLOYEE CREATE FORM - LOCAL STATE SOLUTION (STABLE INPUT)
+// EMPLOYEE CREATE FORM - WORKING SUBMIT BUTTON FIX
 // ============================================================================
-// Solution: Use local state for inputs, sync with Inertia on submit only
+// Fixes: Form submission, route matching, data structure
 
 import React, { useState } from "react";
-import { Head, Link, useForm } from "@inertiajs/react";
+import { Head, Link, router } from "@inertiajs/react";
 import DashboardLayout from "@/Layouts/DashboardLayout";
 import {
     ArrowLeft,
@@ -25,11 +25,12 @@ export default function EmployeeCreate({
     statusOptions = [],
     title = "Tambah Karyawan Baru",
     employee = null,
-    auth
+    auth,
+    errors = {}
 }) {
     const isEdit = !!employee;
 
-    // LOCAL STATE - This prevents re-render issues
+    // LOCAL STATE for form inputs
     const [formData, setFormData] = useState({
         nip: employee?.nip || '',
         nama_lengkap: employee?.nama_lengkap || '',
@@ -49,78 +50,60 @@ export default function EmployeeCreate({
     });
 
     const [activeTab, setActiveTab] = useState('personal');
-    const [validationErrors, setValidationErrors] = useState({});
+    const [processing, setProcessing] = useState(false);
 
-    // Inertia form - only for submission
-    const { post, put, processing } = useForm();
-
-    // STABLE input handler - no re-render
+    // Handle input changes
     const handleChange = (name, value) => {
         setFormData(prev => ({
             ...prev,
             [name]: value
         }));
-
-        // Clear validation error for this field
-        if (validationErrors[name]) {
-            setValidationErrors(prev => ({
-                ...prev,
-                [name]: null
-            }));
-        }
     };
 
-    // Form submission
+    // FIXED: Form submission with proper Inertia syntax
     const handleSubmit = (e) => {
         e.preventDefault();
 
-        // Clear previous errors
-        setValidationErrors({});
+        console.log('Form submitted with data:', formData); // Debug log
 
-        // Basic validation
-        const errors = {};
-        if (!formData.nip.trim()) errors.nip = 'NIP wajib diisi';
-        if (!formData.nama_lengkap.trim()) errors.nama_lengkap = 'Nama lengkap wajib diisi';
-        if (!formData.department.trim()) errors.department = 'Department wajib dipilih';
-        if (!formData.unit_organisasi.trim()) errors.unit_organisasi = 'Unit organisasi wajib diisi';
+        setProcessing(true);
 
-        if (Object.keys(errors).length > 0) {
-            setValidationErrors(errors);
-            return;
-        }
-
-        // Submit with Inertia
         if (isEdit) {
-            put(`/employees/${employee.id}`, {
-                data: formData,
+            // For edit: PUT method
+            router.put(`/employees/${employee.id}`, formData, {
                 onSuccess: () => {
-                    // Success handled by redirect
+                    console.log('Employee updated successfully');
                 },
                 onError: (errors) => {
-                    setValidationErrors(errors);
+                    console.error('Update errors:', errors);
+                },
+                onFinish: () => {
+                    setProcessing(false);
                 }
             });
         } else {
-            post('/employees', {
-                data: formData,
+            // For create: POST method
+            router.post('/employees', formData, {
                 onSuccess: () => {
-                    // Success handled by redirect
+                    console.log('Employee created successfully');
                 },
                 onError: (errors) => {
-                    setValidationErrors(errors);
+                    console.error('Creation errors:', errors);
+                },
+                onFinish: () => {
+                    setProcessing(false);
                 }
             });
         }
     };
 
-    // Department options
+    // Default options if not passed from controller
     const departmentOptions = departments.length > 0 ? departments : [
         'DEDICATED', 'LOADING', 'RAMP', 'LOCO', 'ULD',
         'LOST & FOUND', 'CARGO', 'ARRIVAL', 'GSE OPERATOR',
         'FLOP', 'AVSEC', 'PORTER'
     ];
 
-    // Status options
     const employeeStatusOptions = statusOptions.length > 0 ? statusOptions : [
         'PEGAWAI TETAP', 'PKWT', 'TAD PAKET SDM', 'TAD PAKET PEKERJAAN'
     ];
@@ -146,6 +129,15 @@ export default function EmployeeCreate({
                             </p>
                         </div>
                     </div>
+                </div>
+
+                {/* Debug Info - Remove in production */}
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <h3 className="font-semibold text-blue-800">Debug Info:</h3>
+                    <p className="text-sm text-blue-700">Processing: {processing ? 'true' : 'false'}</p>
+                    <p className="text-sm text-blue-700">Form Mode: {isEdit ? 'Edit' : 'Create'}</p>
+                    <p className="text-sm text-blue-700">NIP: {formData.nip}</p>
+                    <p className="text-sm text-blue-700">Nama: {formData.nama_lengkap}</p>
                 </div>
 
                 <form onSubmit={handleSubmit} className="space-y-6">
@@ -207,14 +199,15 @@ export default function EmployeeCreate({
                                                 onChange={(e) => handleChange('nip', e.target.value)}
                                                 placeholder="Masukkan NIP karyawan"
                                                 className={`w-full pl-10 pr-3 py-2.5 border rounded-xl focus:ring-2 focus:ring-[#439454] focus:border-transparent transition-all duration-300 ${
-                                                    validationErrors.nip ? 'border-red-500' : 'border-gray-300'
+                                                    errors.nip ? 'border-red-500' : 'border-gray-300'
                                                 }`}
+                                                required
                                             />
                                         </div>
-                                        {validationErrors.nip && (
+                                        {errors.nip && (
                                             <div className="flex items-center gap-2 text-sm text-red-600">
                                                 <AlertCircle className="w-4 h-4" />
-                                                <span>{validationErrors.nip}</span>
+                                                <span>{errors.nip}</span>
                                             </div>
                                         )}
                                     </div>
@@ -232,14 +225,15 @@ export default function EmployeeCreate({
                                                 onChange={(e) => handleChange('nama_lengkap', e.target.value)}
                                                 placeholder="Masukkan nama lengkap"
                                                 className={`w-full pl-10 pr-3 py-2.5 border rounded-xl focus:ring-2 focus:ring-[#439454] focus:border-transparent transition-all duration-300 ${
-                                                    validationErrors.nama_lengkap ? 'border-red-500' : 'border-gray-300'
+                                                    errors.nama_lengkap ? 'border-red-500' : 'border-gray-300'
                                                 }`}
+                                                required
                                             />
                                         </div>
-                                        {validationErrors.nama_lengkap && (
+                                        {errors.nama_lengkap && (
                                             <div className="flex items-center gap-2 text-sm text-red-600">
                                                 <AlertCircle className="w-4 h-4" />
-                                                <span>{validationErrors.nama_lengkap}</span>
+                                                <span>{errors.nama_lengkap}</span>
                                             </div>
                                         )}
                                     </div>
@@ -253,6 +247,7 @@ export default function EmployeeCreate({
                                             value={formData.jenis_kelamin}
                                             onChange={(e) => handleChange('jenis_kelamin', e.target.value)}
                                             className="w-full pl-3 pr-3 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#439454] focus:border-transparent transition-all duration-300"
+                                            required
                                         >
                                             <option value="L">Laki-laki</option>
                                             <option value="P">Perempuan</option>
@@ -308,18 +303,19 @@ export default function EmployeeCreate({
                                             value={formData.department}
                                             onChange={(e) => handleChange('department', e.target.value)}
                                             className={`w-full pl-3 pr-3 py-2.5 border rounded-xl focus:ring-2 focus:ring-[#439454] focus:border-transparent transition-all duration-300 ${
-                                                validationErrors.department ? 'border-red-500' : 'border-gray-300'
+                                                errors.department ? 'border-red-500' : 'border-gray-300'
                                             }`}
+                                            required
                                         >
                                             <option value="">Pilih Department</option>
                                             {departmentOptions.map((dept) => (
                                                 <option key={dept} value={dept}>{dept}</option>
                                             ))}
                                         </select>
-                                        {validationErrors.department && (
+                                        {errors.department && (
                                             <div className="flex items-center gap-2 text-sm text-red-600">
                                                 <AlertCircle className="w-4 h-4" />
-                                                <span>{validationErrors.department}</span>
+                                                <span>{errors.department}</span>
                                             </div>
                                         )}
                                     </div>
@@ -337,14 +333,15 @@ export default function EmployeeCreate({
                                                 onChange={(e) => handleChange('unit_organisasi', e.target.value)}
                                                 placeholder="Masukkan unit organisasi"
                                                 className={`w-full pl-10 pr-3 py-2.5 border rounded-xl focus:ring-2 focus:ring-[#439454] focus:border-transparent transition-all duration-300 ${
-                                                    validationErrors.unit_organisasi ? 'border-red-500' : 'border-gray-300'
+                                                    errors.unit_organisasi ? 'border-red-500' : 'border-gray-300'
                                                 }`}
+                                                required
                                             />
                                         </div>
-                                        {validationErrors.unit_organisasi && (
+                                        {errors.unit_organisasi && (
                                             <div className="flex items-center gap-2 text-sm text-red-600">
                                                 <AlertCircle className="w-4 h-4" />
-                                                <span>{validationErrors.unit_organisasi}</span>
+                                                <span>{errors.unit_organisasi}</span>
                                             </div>
                                         )}
                                     </div>
@@ -375,6 +372,7 @@ export default function EmployeeCreate({
                                             value={formData.status_pegawai}
                                             onChange={(e) => handleChange('status_pegawai', e.target.value)}
                                             className="w-full pl-3 pr-3 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#439454] focus:border-transparent transition-all duration-300"
+                                            required
                                         >
                                             {employeeStatusOptions.map((status) => (
                                                 <option key={status} value={status}>{status}</option>
@@ -414,6 +412,20 @@ export default function EmployeeCreate({
                                                 className="w-full pl-10 pr-3 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#439454] focus:border-transparent transition-all duration-300"
                                             />
                                         </div>
+                                    </div>
+
+                                    {/* Provider */}
+                                    <div className="md:col-span-2 space-y-2">
+                                        <label className="block text-sm font-medium text-gray-700">
+                                            Provider/Vendor
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={formData.provider}
+                                            onChange={(e) => handleChange('provider', e.target.value)}
+                                            placeholder="Masukkan provider/vendor (jika ada)"
+                                            className="w-full pl-3 pr-3 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#439454] focus:border-transparent transition-all duration-300"
+                                        />
                                     </div>
                                 </div>
                             </div>

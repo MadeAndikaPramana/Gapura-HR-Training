@@ -13,34 +13,24 @@ use Carbon\Carbon;
 class EmployeeController extends Controller
 {
     /**
-     * PHASE 1: EMPLOYEE CRUD CONTROLLER - FIXED VERSION
-     * Konsisten dengan UI Firman HR Gapura
-     * Menggunakan Laravel standard ID sebagai primary key
-     * Support untuk MPGA Excel structure
-     */
-
-    /**
-     * Display paginated list of employees with enhanced search and filtering
+     * Display paginated list of employees
      */
     public function index(Request $request)
     {
         try {
-            // Build query with proper relationships
             $query = Employee::query()->where('is_active', true);
 
-            // Enhanced search functionality
+            // Search functionality
             if ($request->filled('search')) {
                 $search = $request->search;
                 $query->where(function($q) use ($search) {
                     $q->where('nama_lengkap', 'like', "%{$search}%")
                       ->orWhere('nip', 'like', "%{$search}%")
-                      ->orWhere('nik', 'like', "%{$search}%")
-                      ->orWhere('jabatan', 'like', "%{$search}%")
-                      ->orWhere('unit_organisasi', 'like', "%{$search}%");
+                      ->orWhere('nik', 'like', "%{$search}%");
                 });
             }
 
-            // Department filter (dari MPGA sheets)
+            // Department filter
             if ($request->filled('department')) {
                 $query->where('department', $request->department);
             }
@@ -50,30 +40,24 @@ class EmployeeController extends Controller
                 $query->where('unit_organisasi', $request->unit_organisasi);
             }
 
-            // Status filter
-            if ($request->filled('status_pegawai')) {
-                $query->where('status_pegawai', $request->status_pegawai);
-            }
+            $employees = $query->orderBy('nama_lengkap')
+                              ->paginate(15)
+                              ->withQueryString();
 
-            // Sort by name (default)
-            $query->orderBy('nama_lengkap', 'asc');
-
-            // Paginate results
-            $employees = $query->paginate(15)->withQueryString();
-
-            // Generate statistics for dashboard cards
-            $statistics = $this->getEmployeeStatistics();
-
-            // Get filter options
-            $filterOptions = $this->getFilterOptions();
+            $statistics = [
+                'total' => Employee::where('is_active', true)->count(),
+                'departments' => Employee::where('is_active', true)->distinct('department')->count('department'),
+                'this_month' => Employee::where('is_active', true)->whereMonth('created_at', now()->month)->count(),
+                'units' => Employee::where('is_active', true)->distinct('unit_organisasi')->count('unit_organisasi'),
+            ];
 
             return Inertia::render('Employees/Index', [
                 'employees' => $employees,
                 'statistics' => $statistics,
-                'filters' => $request->only(['search', 'department', 'unit_organisasi', 'status_pegawai']),
-                'filterOptions' => $filterOptions,
-                'title' => 'Data Karyawan',
-                'subtitle' => 'Kelola data kepegawaian sistem training GAPURA',
+                'filters' => $request->only(['search', 'department', 'unit_organisasi']),
+                'departments' => Employee::select('department')->distinct()->orderBy('department')->pluck('department'),
+                'units' => Employee::select('unit_organisasi')->distinct()->orderBy('unit_organisasi')->pluck('unit_organisasi'),
+                'title' => 'Data Karyawan'
             ]);
 
         } catch (\Exception $e) {
@@ -84,9 +68,10 @@ class EmployeeController extends Controller
 
             return Inertia::render('Employees/Index', [
                 'employees' => ['data' => [], 'total' => 0],
-                'statistics' => $this->getEmptyStatistics(),
+                'statistics' => ['total' => 0, 'departments' => 0, 'this_month' => 0, 'units' => 0],
                 'filters' => [],
-                'filterOptions' => $this->getFilterOptions(),
+                'departments' => [],
+                'units' => [],
                 'error' => 'Terjadi kesalahan saat memuat data karyawan.'
             ]);
         }
@@ -106,14 +91,20 @@ class EmployeeController extends Controller
     }
 
     /**
-     * Store a newly created employee in storage
+     * Store a newly created employee - FIXED VERSION
      */
     public function store(Request $request)
     {
         try {
-            // Comprehensive validation rules
+            Log::info('Employee Store Request', [
+                'data' => $request->all(),
+                'method' => $request->method(),
+                'url' => $request->url()
+            ]);
+
+            // Validation rules - updated to match form fields
             $validated = $request->validate([
-                // Core MPGA fields
+                // Core MPGA fields - REQUIRED
                 'nip' => 'required|string|max:20|unique:employees,nip',
                 'nama_lengkap' => 'required|string|max:255',
                 'department' => 'required|string|max:50',
@@ -132,10 +123,12 @@ class EmployeeController extends Controller
                 'provider' => 'nullable|string|max:255',
 
                 // Contact information
-                'handphone' => 'nullable|string|max:20|regex:/^[0-9+\-\s()]+$/',
+                'handphone' => 'nullable|string|max:20',
                 'email' => 'nullable|email|max:255|unique:employees,email',
-                'alamat' => 'nullable|string|max:500',
+                'alamat' => 'nullable|string|max:1000',
             ]);
+
+            Log::info('Validation passed', ['validated' => $validated]);
 
             // Auto-generate NIK if not provided
             if (empty($validated['nik'])) {
@@ -170,21 +163,30 @@ class EmployeeController extends Controller
 
         } catch (\Illuminate\Validation\ValidationException $e) {
             DB::rollBack();
+
+            Log::warning('Employee Store Validation Error', [
+                'errors' => $e->errors(),
+                'input' => $request->all()
+            ]);
+
             return Redirect::back()
-                          ->withErrors($e->validator)
+                          ->withErrors($e->errors())
                           ->withInput()
                           ->with('error', 'Mohon periksa kembali data yang dimasukkan.');
 
         } catch (\Exception $e) {
             DB::rollBack();
+
             Log::error('Employee Store Error', [
                 'error' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
                 'input' => $request->all()
             ]);
 
             return Redirect::back()
                           ->withInput()
-                          ->with('error', 'Terjadi kesalahan sistem. Silakan coba lagi.');
+                          ->with('error', 'Terjadi kesalahan sistem: ' . $e->getMessage());
         }
     }
 
@@ -194,12 +196,6 @@ class EmployeeController extends Controller
     public function show(Employee $employee)
     {
         try {
-            // Load related training records (untuk Phase 2+)
-            $employee->load([
-                // 'trainingRecords.trainingType', // Uncomment when Phase 2 ready
-                // 'backgroundChecks'
-            ]);
-
             return Inertia::render('Employees/Show', [
                 'employee' => $employee,
                 'title' => "Detail Karyawan - {$employee->nama_lengkap}",
@@ -268,9 +264,9 @@ class EmployeeController extends Controller
                 'provider' => 'nullable|string|max:255',
 
                 // Contact information
-                'handphone' => 'nullable|string|max:20|regex:/^[0-9+\-\s()]+$/',
+                'handphone' => 'nullable|string|max:20',
                 'email' => 'nullable|email|max:255|unique:employees,email,' . $employee->id,
-                'alamat' => 'nullable|string|max:500',
+                'alamat' => 'nullable|string|max:1000',
             ]);
 
             // Recalculate age if birth date changed
@@ -298,7 +294,7 @@ class EmployeeController extends Controller
         } catch (\Illuminate\Validation\ValidationException $e) {
             DB::rollBack();
             return Redirect::back()
-                          ->withErrors($e->validator)
+                          ->withErrors($e->errors())
                           ->withInput()
                           ->with('error', 'Mohon periksa kembali data yang dimasukkan.');
 
@@ -323,7 +319,6 @@ class EmployeeController extends Controller
     {
         try {
             $employeeName = $employee->nama_lengkap;
-            $employeeNip = $employee->nip;
 
             DB::beginTransaction();
 
@@ -337,7 +332,6 @@ class EmployeeController extends Controller
 
             Log::info('Employee Soft Deleted Successfully', [
                 'employee_id' => $employee->id,
-                'nip' => $employeeNip,
                 'nama_lengkap' => $employeeName
             ]);
 
@@ -359,79 +353,6 @@ class EmployeeController extends Controller
     // =====================================================
     // HELPER METHODS
     // =====================================================
-
-    /**
-     * Get employee statistics for dashboard cards
-     */
-    private function getEmployeeStatistics()
-    {
-        try {
-            return [
-                'total' => Employee::where('is_active', true)->count(),
-                'departments' => Employee::where('is_active', true)
-                                       ->distinct('department')
-                                       ->count('department'),
-                'this_month' => Employee::where('is_active', true)
-                                       ->whereMonth('created_at', now()->month)
-                                       ->whereYear('created_at', now()->year)
-                                       ->count(),
-                'units' => Employee::where('is_active', true)
-                                  ->distinct('unit_organisasi')
-                                  ->count('unit_organisasi'),
-                'by_department' => Employee::where('is_active', true)
-                                          ->select('department', DB::raw('count(*) as total'))
-                                          ->groupBy('department')
-                                          ->orderBy('total', 'desc')
-                                          ->get(),
-                'by_status' => Employee::where('is_active', true)
-                                      ->select('status_pegawai', DB::raw('count(*) as total'))
-                                      ->groupBy('status_pegawai')
-                                      ->get(),
-            ];
-        } catch (\Exception $e) {
-            return $this->getEmptyStatistics();
-        }
-    }
-
-    /**
-     * Get empty statistics (fallback)
-     */
-    private function getEmptyStatistics()
-    {
-        return [
-            'total' => 0,
-            'departments' => 0,
-            'this_month' => 0,
-            'units' => 0,
-            'by_department' => [],
-            'by_status' => [],
-        ];
-    }
-
-    /**
-     * Get filter options for dropdowns
-     */
-    private function getFilterOptions()
-    {
-        try {
-            return [
-                'departments' => $this->getDepartmentOptions(),
-                'units' => Employee::where('is_active', true)
-                                  ->select('unit_organisasi')
-                                  ->distinct()
-                                  ->whereNotNull('unit_organisasi')
-                                  ->orderBy('unit_organisasi')
-                                  ->pluck('unit_organisasi'),
-                'status_options' => $this->getStatusOptions(),
-            ];
-        } catch (\Exception $e) {
-            return [
-                'departments' => [],
-                'units' => [],
-                'status_options' => [],
-            ];
-        }
-    }
 
     /**
      * Get department options based on MPGA structure
@@ -493,10 +414,6 @@ class EmployeeController extends Controller
         return $nik;
     }
 
-    // =====================================================
-    // ADDITIONAL METHODS FOR FUTURE PHASES
-    // =====================================================
-
     /**
      * Export employees to Excel (Phase 5)
      */
@@ -507,37 +424,15 @@ class EmployeeController extends Controller
     }
 
     /**
-     * Import employees from Excel (Phase 5)
-     */
-    public function import(Request $request)
-    {
-        // TODO: Implement Excel import
-        return response()->json(['message' => 'Import functionality coming in Phase 5']);
-    }
-
-    /**
      * Get statistics API endpoint for AJAX calls
      */
     public function getStatistics()
     {
-        return response()->json($this->getEmployeeStatistics());
-    }
-
-    /**
-     * Public profile verification (for certificate verification)
-     */
-    public function publicProfile($nip)
-    {
-        $employee = Employee::where('nip', $nip)
-                           ->where('is_active', true)
-                           ->first();
-
-        if (!$employee) {
-            abort(404, 'Karyawan tidak ditemukan');
-        }
-
-        return Inertia::render('Public/EmployeeProfile', [
-            'employee' => $employee->only(['nip', 'nama_lengkap', 'department', 'unit_organisasi'])
+        return response()->json([
+            'total' => Employee::where('is_active', true)->count(),
+            'departments' => Employee::where('is_active', true)->distinct('department')->count('department'),
+            'this_month' => Employee::where('is_active', true)->whereMonth('created_at', now()->month)->count(),
+            'units' => Employee::where('is_active', true)->distinct('unit_organisasi')->count('unit_organisasi'),
         ]);
     }
 }
