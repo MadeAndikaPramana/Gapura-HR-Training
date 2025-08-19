@@ -14,6 +14,7 @@ import {
     Calendar,
     UserCheck
 } from 'lucide-react';
+import DeleteButton from '@/Components/DeleteButton';
 
 export default function EmployeesIndex({
     employees = { data: [] },
@@ -210,6 +211,8 @@ export default function EmployeesIndex({
                                                         >
                                                             Edit
                                                         </Link>
+                                                        <span className="text-gray-300">|</span>
+                                                        <DeleteButton employee={employee} />
                                                     </div>
                                                 </td>
                                             </tr>

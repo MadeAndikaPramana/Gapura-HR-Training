@@ -12,7 +12,7 @@ use Inertia\Inertia;
 |--------------------------------------------------------------------------
 | Web Routes - GAPURA ANGKASA Training Management System
 |--------------------------------------------------------------------------
-| CLEAN VERSION - EMPLOYEE FOCUS
+| FIXED VERSION with Route-Level Middleware
 */
 
 // ============================================================================
@@ -40,16 +40,13 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/dashboard', [TrainingDashboardController::class, 'index'])->name('dashboard');
 
     // ========================================================================
-    // EMPLOYEE MANAGEMENT ROUTES - WORKING VERSION
+    // EMPLOYEE MANAGEMENT ROUTES - FIXED WITH PROPER MIDDLEWARE
     // ========================================================================
 
-    // Employee CRUD - RESTful Resource
-    Route::resource('employees', EmployeeController::class)->except(['show']);
+    // Standard RESTful resource routes untuk Employee
+    Route::resource('employees', EmployeeController::class);
 
-    // Employee show with explicit route (to avoid conflicts)
-    Route::get('/employees/{employee}', [EmployeeController::class, 'show'])->name('employees.show');
-
-    // Employee additional operations
+    // Additional employee operations
     Route::prefix('employees')->name('employees.')->group(function () {
         Route::get('/export', [EmployeeController::class, 'export'])->name('export');
         Route::get('/api/statistics', [EmployeeController::class, 'getStatistics'])->name('api.statistics');

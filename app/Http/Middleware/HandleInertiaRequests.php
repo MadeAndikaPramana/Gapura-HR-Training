@@ -4,7 +4,6 @@ namespace App\Http\Middleware;
 
 use Illuminate\Http\Request;
 use Inertia\Middleware;
-use Tighten\Ziggy\Ziggy;
 
 class HandleInertiaRequests extends Middleware
 {
@@ -18,27 +17,37 @@ class HandleInertiaRequests extends Middleware
     /**
      * Determine the current asset version.
      */
-    public function version(Request $request): ?string
+    public function version(Request $request): string|null
     {
         return parent::version($request);
     }
 
     /**
      * Define the props that are shared by default.
-     *
-     * @return array<string, mixed>
+     * SIMPLIFIED VERSION - Remove problematic methods
      */
     public function share(Request $request): array
     {
-        return [
-            ...parent::share($request),
+        return array_merge(parent::share($request), [
             'auth' => [
-                'user' => $request->user(),
+                'user' => $request->user() ? [
+                    'id' => $request->user()->id,
+                    'name' => $request->user()->name,
+                    'email' => $request->user()->email,
+                    'role' => $request->user()->role ?? 'admin',
+                    'role_display' => $request->user()->role_display ?? 'Administrator',
+                    'is_active' => $request->user()->is_active ?? true,
+                    // Simple helper methods
+                    'is_admin' => $request->user()->isAdmin(),
+                    'is_super_admin' => $request->user()->isSuperAdmin(),
+                ] : null,
             ],
-            'ziggy' => fn () => [
-                ...(new Ziggy)->toArray(),
-                'location' => $request->url(),
+            'flash' => [
+                'success' => fn () => $request->session()->get('success'),
+                'error' => fn () => $request->session()->get('error'),
+                'warning' => fn () => $request->session()->get('warning'),
+                'info' => fn () => $request->session()->get('info'),
             ],
-        ];
+        ]);
     }
 }

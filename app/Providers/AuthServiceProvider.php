@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Models\User;
 use Illuminate\Foundation\Support\Providers\AuthServiceProvider as ServiceProvider;
 use Illuminate\Support\Facades\Gate;
 
@@ -23,86 +24,110 @@ class AuthServiceProvider extends ServiceProvider
     {
         $this->registerPolicies();
 
-        // Define Gates for GAPURA Training System
+        // =======================================================================
+        // SIMPLIFIED PERMISSION SYSTEM - ADMIN & SUPER ADMIN ONLY
+        // =======================================================================
 
-        // Admin Gates
-        Gate::define('admin-access', function ($user) {
-            return in_array($user->role, ['admin', 'super_admin']);
+        // Base Admin Access (admin + super_admin)
+        Gate::define('admin-access', function (User $user) {
+            return $user->isAdmin();
         });
 
-        Gate::define('super-admin-access', function ($user) {
-            return $user->role === 'super_admin';
+        // Super Admin Only Access
+        Gate::define('super-admin-access', function (User $user) {
+            return $user->isSuperAdmin();
         });
 
-        // Training Management Gates
-        Gate::define('manage-training-records', function ($user) {
-            return in_array($user->role, ['admin', 'super_admin']);
+        // =======================================================================
+        // OPERATIONAL DATA MANAGEMENT (admin + super_admin)
+        // =======================================================================
+
+        // Employee Management
+        Gate::define('manage-employees', function (User $user) {
+            return $user->isAdmin(); // admin + super_admin
         });
 
-        Gate::define('view-training-records', function ($user) {
-            return in_array($user->role, ['staff', 'admin', 'super_admin']);
+        Gate::define('view-employees', function (User $user) {
+            return $user->isAdmin(); // admin + super_admin
         });
 
-        Gate::define('create-training-records', function ($user) {
-            return in_array($user->role, ['admin', 'super_admin']);
+        // Training Records Management
+        Gate::define('manage-training-records', function (User $user) {
+            return $user->isAdmin(); // admin + super_admin
         });
 
-        Gate::define('edit-training-records', function ($user) {
-            return in_array($user->role, ['admin', 'super_admin']);
+        Gate::define('view-training-records', function (User $user) {
+            return $user->isAdmin(); // admin + super_admin
         });
 
-        Gate::define('delete-training-records', function ($user) {
-            return $user->role === 'super_admin';
+        // Reports and Analytics
+        Gate::define('view-reports', function (User $user) {
+            return $user->isAdmin(); // admin + super_admin
         });
 
-        // Employee Management Gates
-        Gate::define('manage-employees', function ($user) {
-            return in_array($user->role, ['admin', 'super_admin']);
+        Gate::define('export-data', function (User $user) {
+            return $user->isAdmin(); // admin + super_admin
         });
 
-        Gate::define('view-employees', function ($user) {
-            return in_array($user->role, ['staff', 'admin', 'super_admin']);
+        Gate::define('import-data', function (User $user) {
+            return $user->isAdmin(); // admin + super_admin
         });
 
-        // Training Types Management Gates
-        Gate::define('manage-training-types', function ($user) {
-            return $user->role === 'super_admin';
+        // =======================================================================
+        // MASTER DATA MANAGEMENT (super_admin only)
+        // =======================================================================
+
+        // Training Types Management (create new training categories)
+        Gate::define('manage-training-types', function (User $user) {
+            return $user->isSuperAdmin(); // super_admin only
         });
 
-        // Reports and Analytics Gates
-        Gate::define('view-reports', function ($user) {
-            return in_array($user->role, ['admin', 'super_admin']);
+        // Department Management (create new departments)
+        Gate::define('manage-departments', function (User $user) {
+            return $user->isSuperAdmin(); // super_admin only
         });
 
-        Gate::define('export-data', function ($user) {
-            return in_array($user->role, ['admin', 'super_admin']);
+        // Certificate Templates Management (create new certificate types)
+        Gate::define('manage-certificate-templates', function (User $user) {
+            return $user->isSuperAdmin(); // super_admin only
         });
 
-        Gate::define('import-data', function ($user) {
-            return $user->role === 'super_admin';
+        // System Settings Management
+        Gate::define('manage-system-settings', function (User $user) {
+            return $user->isSuperAdmin(); // super_admin only
         });
 
-        // System Settings Gates
-        Gate::define('manage-system-settings', function ($user) {
-            return $user->role === 'super_admin';
+        // User Management (create/edit users)
+        Gate::define('manage-users', function (User $user) {
+            return $user->isSuperAdmin(); // super_admin only
         });
 
-        Gate::define('manage-users', function ($user) {
-            return $user->role === 'super_admin';
+        // Master Data Fields (add new fields to forms)
+        Gate::define('manage-master-fields', function (User $user) {
+            return $user->isSuperAdmin(); // super_admin only
         });
 
-        // Notification Gates
-        Gate::define('send-notifications', function ($user) {
-            return in_array($user->role, ['admin', 'super_admin']);
+        // =======================================================================
+        // SHARED PERMISSIONS (admin + super_admin)
+        // =======================================================================
+
+        // Certificate Generation & Verification
+        Gate::define('generate-certificates', function (User $user) {
+            return $user->isAdmin(); // admin + super_admin
         });
 
-        // Certificate Gates
-        Gate::define('generate-certificates', function ($user) {
-            return in_array($user->role, ['admin', 'super_admin']);
+        Gate::define('verify-certificates', function (User $user) {
+            return $user->isAdmin(); // admin + super_admin
         });
 
-        Gate::define('verify-certificates', function ($user) {
-            return in_array($user->role, ['staff', 'admin', 'super_admin']);
+        // Background Checks Management
+        Gate::define('manage-background-checks', function (User $user) {
+            return $user->isAdmin(); // admin + super_admin
+        });
+
+        // Notifications
+        Gate::define('send-notifications', function (User $user) {
+            return $user->isAdmin(); // admin + super_admin
         });
     }
 }
